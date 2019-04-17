@@ -1,11 +1,12 @@
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 from pydantic import BaseModel, validator
 from models.chat import Chat
+from models.user import User
 
 
 class Message(BaseModel):
     message_id: int
-    sender: Optional[Any]
+    sender: Optional[User]
     date: int
     chat: Chat
     forward_from: Optional[Any]
