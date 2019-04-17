@@ -10,6 +10,9 @@ __pycache__/
 .private/
 configs/
 
+# Ignore Visual Studio Code configs
+.vscode/
+
 # C extensions
 *.so
 
