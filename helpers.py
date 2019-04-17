@@ -5,17 +5,14 @@ from aiohttp import ClientSession
 
 import jwt
 
-HELVYBOT_PEM_FILE_PATH = './helvybot.github.pem'
-HELVYBOT_APP_ID = '29178'
-
 
 def load_private_key(path):
-    with open(HELVYBOT_PEM_FILE_PATH, 'rb') as file:
+    with open(path, 'rb') as file:
         data = file.read()
         key = serialization.load_pem_private_key(data, None, default_backend())
         if not isinstance(key, RSAPrivateKey):
             raise TypeError(
-                f"File [{HELVYBOT_PEM_FILE_PATH}] should be RSA PRIVATE KEY")
+                f"File [{path}] should be RSA PRIVATE KEY")
 
         return key
 
