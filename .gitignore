@@ -3,6 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ignore PRIVATE AND PUBLIC RSA KEYS
+*.pem
+
+# Ignore sensitive data
+.private/
+configs/
+
 # C extensions
 *.so
 
