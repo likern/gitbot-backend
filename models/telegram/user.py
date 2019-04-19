@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from models.base_types import ChatType, OptStr, OptBool, OptAny
+from models.telegram.base_types import ChatType, OptStr, OptBool, OptAny
 
 
 class User(BaseModel):

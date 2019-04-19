@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 from pydantic import BaseModel, validator
-from models.chat import Chat
-from models.user import User
+from models.telegram.chat import Chat
+from models.telegram.user import User
 
 
 class Message(BaseModel):

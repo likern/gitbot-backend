@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 from pydantic import BaseModel, validator
-from models.base_types import ChatType, OptStr, OptBool, OptAny
+from models.telegram.base_types import ChatType, OptStr, OptBool, OptAny
 # from models import message
 
 
