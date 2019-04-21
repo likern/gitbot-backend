@@ -7,6 +7,7 @@ import aiohttp
 import helpers
 from decorators import mongodb
 from motor import motor_asyncio
+from emoji import emojize
 # from models.message import Message, TextMessage, User
 # from models.update import Update
 from models import github, mongo, telegram
@@ -124,49 +125,136 @@ def parse_telegram_payloads(request):
         # return telegram.Message.parse_obj(data)
 
 
+@app.route("/github/setup_url", methods=['GET', 'POST'])
+async def github_setup_url(request):
+    print("[GITHUB] [SETUP URL]:")
+    print(request.url)
+    print("[GITHUB] [SETUP URL] QUERY PARAMS:")
+    print(request.args)
+    print("[GITHUB] [SETUP URL] HEADERS:")
+    print(request.headers)
+    print("[GITHUB] [SETUP URL] INCOMING BODY:")
+    print(json.dumps(request.json, indent=2, sort_keys=True))
+
+    # await api.telegram.send_message(telegram.SendMessage(
+    #     chat_id=payload.chat.id,
+    #     text="Hi there! My name is *HelvyBot* and I'll help you to automate your daily routines on *GitHub*"
+    #     parse_mode=telegram.ParseMode.markdown
+    # ))
+
+    # if 'state' in request.args:
+    #     state = request.args['state']
+
+    # redirect_url = 'https://telegram.me/helvybot'
+    # redirect_url = f'https://api.telegram.org/bot731461938:AAHBePXz0g-QtDTHLOHX0CqcYRm71_apgcg/sendMessage?chat_id=[CHANNEL_NAME]&text=[MESSAGE_TEXT]'
+    return response.json(
+        {},
+        headers={'Location': redirect_url},
+        status=308
+    )
+    # return response.json({}, status=200)
+
+    # states = request.args['state']
+    # codes = request.args['code']
+    # if not(states and codes):
+    #     return response.json({}, status=299)
+
+    # if not(len(states) == 1 and len(codes) == 1):
+    #     return response.json({}, status=299)
+
+    # state = states[0]
+    # code = codes[0]
+    # document = await db.telegram.users.find_one(
+    #     filter={
+    #         "metadata.state": state,
+    #         "metadata.link_status": mongo.MongoUserGithubLinking.not_linked.value
+    #     },
+    #     projection=["metadata"]
+    # )
+
+    # if document is None:
+    #     return response.json({}, status=299)
+
+    # object_id = document['_id']
+    # # user_metadata = mongo.MongoUserNotLinked.parse_obj(document)
+    # updated_metadata = mongo.MongoUserLinked(
+    #     code=code,
+    #     link_status=mongo.MongoUserGithubLinking.linked.value
+    # )
+    # result = await db.telegram.users.update_one(
+    #     filter={"_id": object_id},
+    #     update={
+    #         "$set": {"metadata": updated_metadata.dict(skip_defaults=True)}
+    #     }
+    # )
+    # if result.acknowledged and result.modified_count == 1:
+    #     status = 200
+    # else:
+    #     status = 502
+    # return response.json({}, status=status)
+
+
 @app.route("/github/auth", methods=['GET'])
 async def github_auth_webhook(request):
-    print("GITHUB INCOMING AUTH WEBHOOK:")
+    print("[GITHUB] [AUTH] QUERY PARAMS:")
+    print(request.args)
+    print("[GITHUB] [AUTH] HEADERS:")
+    print(request.headers)
+    print("[GITHUB] [AUTH] INCOMING BODY:")
     print(json.dumps(request.json, indent=2, sort_keys=True))
 
     states = request.args['state']
     codes = request.args['code']
-    if not(states and codes):
-        return response.json({}, status=299)
+    if states and codes and len(states) == 1 and len(states) == 1:
+        state = states[0]
+        code = codes[0]
+        document = await db.telegram.users.find_one(
+            filter={
+                "metadata.authentication.state": state,
+                "metadata.authentication.link_status": mongo.MongoUserGithubLinking.not_linked.value
+            },
+            projection=["metadata"]
+        )
 
-    if not(len(states) == 1 and len(codes) == 1):
-        return response.json({}, status=299)
+        if document:
+            object_id = document['_id']
+            chat_id = document['metadata']['chat_id']
 
-    state = states[0]
-    code = codes[0]
-    document = await db.telegram.users.find_one(
-        filter={
-            "metadata.state": state,
-            "metadata.link_status": mongo.MongoUserGithubLinking.not_linked.value
-        },
-        projection=["metadata"]
+            updated_metadata = mongo.MongoUserLinked(
+                code=code,
+                link_status=mongo.MongoUserGithubLinking.linked.value
+            )
+            result = await db.telegram.users.update_one(
+                filter={"_id": object_id},
+                update={
+                    "$set": {"metadata.authentication": updated_metadata.dict(skip_defaults=True)}
+                }
+            )
+            if result.acknowledged and result.modified_count == 1:
+                msg1 = telegram.SendMessage(
+                    chat_id=chat_id,
+                    text=emojize("*Success!* :clap:", use_aliases=True),
+                    parse_mode=telegram.ParseMode.markdown
+                )
+                await api.telegram.send_message(msg1)
+                await telegram_bots(chat_id)
+            else:
+                msg1 = telegram.SendMessage(
+                    chat_id=chat_id,
+                    text=emojize("Authorization failed :confused:",
+                                 use_aliases=True),
+                    parse_mode=telegram.ParseMode.markdown
+                )
+                await api.telegram.send_message(msg1)
+
+    redirect_url = 'https://telegram.me/helvybot'
+    return response.json(
+        {},
+        headers={'Location': redirect_url},
+        status=308
     )
 
-    if document is None:
-        return response.json({}, status=299)
-
-    object_id = document['_id']
-    # user_metadata = mongo.MongoUserNotLinked.parse_obj(document)
-    updated_metadata = mongo.MongoUserLinked(
-        code=code,
-        link_status=mongo.MongoUserGithubLinking.linked.value
-    )
-    result = await db.telegram.users.update_one(
-        filter={"_id": object_id},
-        update={
-            "$set": {"metadata": updated_metadata.dict(skip_defaults=True)}
-        }
-    )
-    if result.acknowledged and result.modified_count == 1:
-        status = 200
-    else:
-        status = 502
-    return response.json({}, status=status)
+    # return response.json({}, status=status)
     # payload = parse_github_payloads(request)
 
     # if isinstance(payload, github.IssueEvent):
@@ -205,6 +293,15 @@ async def github_auth_webhook(request):
 
 @app.route("/github", methods=['POST'])
 async def github_webhook(request):
+
+    print("[GITHUB] [WEBHOOK] QUERY PARAMS:")
+    print(request.args)
+    print("[GITHUB] [WEBHOOK] HEADERS:")
+    print(request.headers)
+    print("[GITHUB] [WEBHOOK] INCOMING BODY:")
+    print(json.dumps(request.json, indent=2, sort_keys=True))
+
+    return response.json({}, status=200)
     payload = parse_github_payloads(request)
 
     if isinstance(payload, github.IssueEvent):
@@ -250,7 +347,7 @@ async def telegram_webhook(request):
     payload = parse_telegram_payloads(request)
     if isinstance(payload, telegram.StartCommand):
 
-        obj = mongo.MongoUser.new_from(payload.sender)
+        obj = mongo.MongoUser.new_from(payload.sender, chat_id=payload.chat.id)
         result = await db.telegram.users.update_one(
             {"data.id": obj.data.id},
             {"$set": obj.dict(skip_defaults=True)},
@@ -260,30 +357,41 @@ async def telegram_webhook(request):
         if not result.acknowledged:
             return response.json({}, status=500)
 
-        welcome_message = telegram.SendMessage(
+        msg1 = telegram.SendMessage(
             chat_id=payload.chat.id,
-            text="Hello and welcome! I will help you automating time-consuming tasks in GithHub ;)"
+            text="Hi there! My name is *HelvyBot* and I'll help you to automate your daily routines on *GitHub*",
+            parse_mode=telegram.ParseMode.markdown
         )
-        await api.telegram.send_message(welcome_message)
-        await asyncio.sleep(0.3)
-        install_message = telegram.SendMessage(
+        await api.telegram.send_message(msg1)
+        msg2 = telegram.SendMessage(
             chat_id=payload.chat.id,
-            text="Let's start with installing me on Github"
+            text="But before, I need some rights to help you",
+            parse_mode=telegram.ParseMode.markdown
         )
-        await api.telegram.send_message(install_message)
-        await asyncio.sleep(0.3)
+        await api.telegram.send_message(msg2)
+        await asyncio.sleep(1)
 
-        state = obj.metadata.state
+        state = obj.metadata.authentication.state
         url_button = telegram.InlineUrlButton(
-            text='Install HelvyBot on Github',
+            text='Authorization',
             url=f'https://github.com/login/oauth/authorize?client_id={app.config.GITHUB_CLIENT_ID}&state={state}'
         )
+
+        # url_button = telegram.InlineUrlButton(
+        #     text='Install HelvyBot',
+        #     url=f'https://github.com/apps/helvybot/installations/new'
+        # )
+        # url_button = telegram.InlineUrlButton(
+        #     text='Install HelvyBot',
+        #     url=f'http://helvy.ngrok.io/auth/telegram?state={state}'
+        # )
+
         keyboard_markup = telegram.InlineKeyboardMarkup(
             inline_keyboard=[[url_button]])
         app_github_link = telegram.SendMessage(
             chat_id=payload.chat.id,
-            text='Test',
-            disable_web_page_preview=False,
+            text='Follow this link',
+            disable_web_page_preview=True,
             reply_markup=keyboard_markup
         )
 
@@ -318,6 +426,102 @@ async def telegram_webhook(request):
     # app.add_task(create_if_new_user(update.message.sender))
 
     return response.json({}, status=200)
+
+
+@app.route("/auth/telegram", methods=['POST', 'GET'])
+async def telegram_auth_endpoint(request):
+    # Here we receive unique code state in query parameter
+    # Thus we can be sure it's a valid user
+    print("[TELEGRAM] [AUTH] QUERY PARAMS:")
+    print(request.args)
+    print("[TELEGRAM] [AUTH] HEADERS:")
+    print(request.headers)
+    print("[TELEGRAM] [AUTH] INCOMING BODY:")
+    print(json.dumps(request.json, indent=2, sort_keys=True))
+
+    redirect_url = 'https://github.com/apps/helvybot/installations/new?mobile=1'
+    if 'state' in request.args:
+        state = request.args['state']
+        return response.json(
+            {},
+            headers={'X-HelvyBot-State': state, 'Location': redirect_url},
+            status=308
+        )
+    return response.json({}, status=502)
+
+    # payload = parse_telegram_payloads(request)
+    # if isinstance(payload, telegram.StartCommand):
+
+    #     obj = mongo.MongoUser.new_from(payload.sender)
+    #     result = await db.telegram.users.update_one(
+    #         {"data.id": obj.data.id},
+    #         {"$set": obj.dict(skip_defaults=True)},
+    #         upsert=True
+    #     )
+
+    #     if not result.acknowledged:
+    #         return response.json({}, status=500)
+
+    #     welcome_message = telegram.SendMessage(
+    #         chat_id=payload.chat.id,
+    #         text="Hello and welcome! I will help you automating time-consuming tasks in GithHub ;)"
+    #     )
+    #     await api.telegram.send_message(welcome_message)
+    #     await asyncio.sleep(0.3)
+    #     install_message = telegram.SendMessage(
+    #         chat_id=payload.chat.id,
+    #         text="Let's start with installing me on Github"
+    #     )
+    #     await api.telegram.send_message(install_message)
+    #     await asyncio.sleep(0.3)
+
+    #     state = obj.metadata.state
+    #     # url_button = telegram.InlineUrlButton(
+    #     #     text='Install HelvyBot on Github',
+    #     #     url=f'https://github.com/login/oauth/authorize?client_id={app.config.GITHUB_CLIENT_ID}&state={state}'
+    #     # )
+    #     url_button = telegram.InlineUrlButton(
+    #         text='Install HelvyBot',
+    #         url=f'https://github.com/apps/helvybot/installations/new'
+    #     )
+
+    #     keyboard_markup = telegram.InlineKeyboardMarkup(
+    #         inline_keyboard=[[url_button]])
+    #     app_github_link = telegram.SendMessage(
+    #         chat_id=payload.chat.id,
+    #         text='Test',
+    #         disable_web_page_preview=False,
+    #         reply_markup=keyboard_markup
+    #     )
+
+    #     await api.telegram.send_message(app_github_link)
+    #     return response.json({}, status=200)
+    # return response.json({}, status=200)
+
+
+async def telegram_bots(chat_id: telegram.ChatId):
+    stale_button = telegram.KeyboardButton(
+        text='Stale Bot')
+    keyboard_markup = telegram.ReplyKeyboardMarkup(
+        keyboard=[[stale_button]],
+        resize_keyboard=True
+    )
+    config_message = telegram.SendMessage(
+        chat_id=chat_id,
+        text="It's time to *configure* bots. Select a bot to set up",
+        parse_mode=telegram.ParseMode.markdown,
+        reply_markup=keyboard_markup
+    )
+
+    await api.telegram.send_message(config_message)
+
+
+async def redirect_to_github_with_custom_headers(self, *, url, state):
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            print(resp.status)
+            print(await resp.text())
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)

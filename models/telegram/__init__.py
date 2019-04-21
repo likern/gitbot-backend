@@ -1,8 +1,12 @@
 from models.telegram.chat import Chat
 from models.telegram.message import Message
 from models.telegram.commands import StartCommand
-from models.telegram.send_message import SendMessage, ChatId
-from models.telegram.keyboardbutton import InlineKeyboardMarkup, InlineUrlButton, InlineCallbackButton, InlineKeyboardButton
+from models.telegram.send_message import SendMessage, ChatId, ParseMode
+from models.telegram.keyboardbutton import (
+    InlineKeyboardMarkup, InlineUrlButton,
+    InlineCallbackButton, InlineKeyboardButton,
+    KeyboardButton, ReplyKeyboardMarkup
+)
 from models.telegram.user import User
 from models.telegram.base_types import OptStr, OptInt, OptBool, ChatId, ChatType
 # from models.mongo.issues import MongoIssue
@@ -25,5 +29,7 @@ __all__ = [
     "InlineKeyboardMarkup",
     "InlineUrlButton",
     "InlineCallbackButton",
-    "InlineKeyboardButton"
+    "InlineKeyboardButton",
+    "KeyboardButton",
+    "ReplyKeyboardMarkup"
 ]

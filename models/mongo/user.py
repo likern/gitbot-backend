@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional, Union, Mapping
 from pydantic import BaseModel, UUID4, validator
 from models import telegram
+from models.telegram.base_types import ChatId
 
 
 class MongoUserGithubLinking(str, Enum):
@@ -11,11 +12,7 @@ class MongoUserGithubLinking(str, Enum):
     linked = 'linked'
 
 
-class MongoUserMetadata(BaseModel):
-    link_status: MongoUserGithubLinking
-
-
-class MongoUserNotLinked(MongoUserMetadata):
+class MongoUserNotLinked(BaseModel):
     state: str
     link_status: MongoUserGithubLinking = MongoUserGithubLinking.not_linked
 
@@ -23,7 +20,7 @@ class MongoUserNotLinked(MongoUserMetadata):
         use_enum_values = True
 
 
-class MongoUserLinked(MongoUserMetadata):
+class MongoUserLinked(BaseModel):
     code: str
     link_status: MongoUserGithubLinking = MongoUserGithubLinking.linked
 
@@ -31,22 +28,35 @@ class MongoUserLinked(MongoUserMetadata):
         use_enum_values = True
 
 
+class MongoUserMetadata(BaseModel):
+    chat_id: ChatId
+    authentication: Union[MongoUserNotLinked, MongoUserLinked]
+
+
 class MongoUser(BaseModel):
     data: Any
-    metadata: Union[MongoUserNotLinked, MongoUserLinked]
+    metadata: MongoUserMetadata
 
     @staticmethod
-    def new_from(data: telegram.User):
-        if not isinstance(data, telegram.User):
+    def new_from(user: telegram.User, chat_id: telegram.ChatId):
+        if not isinstance(user, telegram.User):
             raise TypeError(
                 f'data should be of [telegram.User] type')
 
-        metadata = MongoUserNotLinked(
+        user_not_linked = MongoUserNotLinked(
             state=str(uuid.uuid4()),
             link_status=MongoUserGithubLinking.not_linked
         )
+        metadata = MongoUserMetadata(
+            chat_id=chat_id, authentication=user_not_linked
+        )
+        # metadata = {
+        #     "authentication": user_not_linked,
+        #     "chat_id": chat_id
+        # }
+
         return MongoUser.parse_obj({
-            'data': data,
+            'data': user,
             'metadata': metadata
         })
 

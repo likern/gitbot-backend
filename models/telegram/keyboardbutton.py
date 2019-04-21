@@ -35,3 +35,16 @@ class InlineCallbackButton(InlineKeyboardButton):
 
 class InlineKeyboardMarkup(BaseModel):
     inline_keyboard: List[List[InlineKeyboardButton]]
+
+
+class KeyboardButton(BaseModel):
+    text: str
+    request_contact: OptBool
+    request_location: OptBool
+
+
+class ReplyKeyboardMarkup(BaseModel):
+    keyboard: List[List[KeyboardButton]]
+    resize_keyboard: OptBool
+    one_time_keyboard: OptBool
+    selective: OptBool
