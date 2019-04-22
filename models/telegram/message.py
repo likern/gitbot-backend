@@ -4,7 +4,7 @@ from models.telegram.chat import Chat
 from models.telegram.user import User
 
 
-class Message(BaseModel):
+class EntityMessage(BaseModel):
     message_id: int
     sender: Optional[User]
     date: int
@@ -56,7 +56,7 @@ class Message(BaseModel):
         }
 
 
-class TextMessage(Message):
+class EntityTextMessage(EntityMessage):
     text: str
 
     @validator('text')

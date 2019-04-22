@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Any, Optional, Union
 from pydantic import BaseModel, validator
-from models.telegram.message import TextMessage
+from models.telegram.message import EntityTextMessage
 
 
 class IssueAction(str, Enum):
@@ -21,9 +21,18 @@ class IssueAction(str, Enum):
     demilestoned = 'demilestoned'
 
 
-class StartCommand(TextMessage):
+class EntityStartCommand(EntityTextMessage):
     @validator('text')
     def check_text_field(cls, value):
         if not(value == '/start' or value.startswith('/start ')):
             raise ValueError(f'text field {value} should starts with /start')
+        return value
+
+
+class EntityDescriptionCommand(EntityTextMessage):
+    @validator('text')
+    def check_text_field(cls, value):
+        if not(value == '/description' or value.startswith('/description ')):
+            raise ValueError(
+                f'text field {value} should starts with /description')
         return value

@@ -30,6 +30,7 @@ class MongoUserLinked(BaseModel):
 
 class MongoUserMetadata(BaseModel):
     chat_id: ChatId
+    language: str
     authentication: Union[MongoUserNotLinked, MongoUserLinked]
 
 
@@ -48,7 +49,9 @@ class MongoUser(BaseModel):
             link_status=MongoUserGithubLinking.not_linked
         )
         metadata = MongoUserMetadata(
-            chat_id=chat_id, authentication=user_not_linked
+            chat_id=chat_id,
+            authentication=user_not_linked,
+            language=user.language_code
         )
         # metadata = {
         #     "authentication": user_not_linked,
