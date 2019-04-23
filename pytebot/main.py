@@ -80,7 +80,7 @@ class TelegramBot:
 
         return await func(model)
 
-    async def send_message(self, obj_type, **kwargs):
+    async def send_message(self, obj_type=telegram.SendMessage, **kwargs):
 
         if not issubclass(obj_type, telegram.SendMessage):
             raise TypeError(
@@ -92,24 +92,40 @@ class TelegramBot:
         async with self.http_client.post(url, json=json_payload) as resp:
             print(f"Response status [{resp.status}]")
             json = await resp.json()
+            return json
             print(f"Response body: [{json}]")
 
+    async def delete_message(self, obj_type=telegram.DeleteMessage, **kwargs):
 
-class Telegram:
-    def __init__(self, base_url=BASE_URL, *, token, client):
-        self.base_url = f"{base_url}{token}/"
-        self._client = client
-
-    async def send_message(self, type, *args, **kwargs):
-
-        if not issubclass(type, telegram.SendMessage):
+        if not issubclass(obj_type, telegram.DeleteMessage):
             raise TypeError(
-                f"{type} should be subclass of telegram.SendMessage")
+                f"{obj_type} should be subclass of telegram.DeleteMessage")
 
-        model = type.parse_obj(*args, **kwargs)
+        model = obj_type(**kwargs)
         json_payload = model.dict(skip_defaults=True)
-        url = f"{self.base_url}sendMessage"
-        async with self._client.post(url, json=json_payload) as resp:
+        url = f"{self._base_url}deleteMessage"
+        async with self.http_client.post(url, json=json_payload) as resp:
             print(f"Response status [{resp.status}]")
             json = await resp.json()
+            return json
             print(f"Response body: [{json}]")
+
+
+# class Telegram:
+#     def __init__(self, base_url=BASE_URL, *, token, client):
+#         self.base_url = f"{base_url}{token}/"
+#         self._client = client
+
+#     async def send_message(self, type, *args, **kwargs):
+
+#         if not issubclass(type, telegram.SendMessage):
+#             raise TypeError(
+#                 f"{type} should be subclass of telegram.SendMessage")
+
+#         model = type.parse_obj(*args, **kwargs)
+#         json_payload = model.dict(skip_defaults=True)
+#         url = f"{self.base_url}sendMessage"
+#         async with self._client.post(url, json=json_payload) as resp:
+#             print(f"Response status [{resp.status}]")
+#             json = await resp.json()
+#             print(f"Response body: [{json}]")

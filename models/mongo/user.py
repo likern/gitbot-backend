@@ -7,68 +7,63 @@ from models import telegram
 from models.telegram.base_types import ChatId
 
 
-class MongoUserGithubLinking(str, Enum):
-    not_linked = 'not_linked'
-    linked = 'linked'
+class MongoUserAuthStatus(str, Enum):
+    pending = 'pending'
+    success = 'success'
 
 
-class MongoUserNotLinked(BaseModel):
-    state: str
-    link_status: MongoUserGithubLinking = MongoUserGithubLinking.not_linked
-
-    class Config:
-        use_enum_values = True
-
-
-class MongoUserLinked(BaseModel):
+class MongoUserAuthSuccess(BaseModel):
     code: str
-    link_status: MongoUserGithubLinking = MongoUserGithubLinking.linked
+    status: MongoUserAuthStatus = MongoUserAuthStatus.success
 
     class Config:
         use_enum_values = True
 
 
-class MongoUserMetadata(BaseModel):
+class MongoUserAuthPending(BaseModel):
+    state: str
+    message_id: Optional[str]
+    status: MongoUserAuthStatus = MongoUserAuthStatus.pending
+
+    class Config:
+        use_enum_values = True
+
+
+class MongoUserLang(BaseModel):
+    current: str
+    telegram: str
+
+
+class MongoUserPrivacy(BaseModel):
     chat_id: ChatId
-    language: str
-    authentication: Union[MongoUserNotLinked, MongoUserLinked]
+
+
+class MongoUserSettings(BaseModel):
+    lang: MongoUserLang
+    privacy: MongoUserPrivacy
 
 
 class MongoUser(BaseModel):
-    data: Any
-    metadata: MongoUserMetadata
+    user_id: int
+    settings: MongoUserSettings
+    auth: Union[MongoUserAuthPending, MongoUserAuthSuccess]
 
     @staticmethod
-    def new_from(user: telegram.User, chat_id: telegram.ChatId):
-        if not isinstance(user, telegram.User):
-            raise TypeError(
-                f'data should be of [telegram.User] type')
+    def new_from(user_id: int, chat_id: ChatId, lang: str):
+        lang_settings = MongoUserLang(current=lang, telegram=lang)
+        privacy_settings = MongoUserPrivacy(chat_id=chat_id)
+        user_settings = MongoUserSettings(
+            lang=lang_settings,
+            privacy=privacy_settings
+        )
 
-        user_not_linked = MongoUserNotLinked(
+        auth_status = MongoUserAuthPending(
             state=str(uuid.uuid4()),
-            link_status=MongoUserGithubLinking.not_linked
+            status=MongoUserAuthStatus.pending
         )
-        metadata = MongoUserMetadata(
-            chat_id=chat_id,
-            authentication=user_not_linked,
-            language=user.language_code
+
+        return MongoUser(
+            user_id=user_id,
+            settings=user_settings,
+            auth=auth_status
         )
-        # metadata = {
-        #     "authentication": user_not_linked,
-        #     "chat_id": chat_id
-        # }
-
-        return MongoUser.parse_obj({
-            'data': user,
-            'metadata': metadata
-        })
-
-
-class ProjectionMongoUserNotLinked(BaseModel):
-    _id: Any
-    metadata: MongoUserNotLinked
-
-
-class ProjectionMongoUserLinked(BaseModel):
-    _id: Any
-    metadata: MongoUserLinked

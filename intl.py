@@ -16,14 +16,14 @@ class Intl:
         async def internal_function():
             chat_id = telegram_chat_id.get()
             document = await self._users.find_one(
-                filter={"metadata.chat_id": chat_id},
-                projection=["metadata.language"]
+                filter={"settings.privacy.chat_id": chat_id},
+                projection=["settings.lang.current"]
             )
 
             if document:
-                language = document['metadata']['language']
+                lang = document['settings']['lang']['current']
                 document = await self._collection.find_one(
-                    filter={"key": attr, "lang": language},
+                    filter={"key": attr, "lang": lang},
                     projection=["text"]
                 )
 
@@ -36,6 +36,7 @@ class Intl:
                 return document['text']
 
             raise ValueError(
-                "Can't find value for [metadata.language] for {chat_id}")
+                f"Can't find document for [settings.privacy.chat_id = {chat_id}]"
+            )
 
         return internal_function()

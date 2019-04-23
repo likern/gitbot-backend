@@ -6,7 +6,7 @@ from models.telegram.user import User
 
 class EntityMessage(BaseModel):
     message_id: int
-    sender: Optional[User]
+    user: Optional[User]
     date: int
     chat: Chat
     forward_from: Optional[Any]
@@ -52,7 +52,7 @@ class EntityMessage(BaseModel):
 
     class Config:
         fields = {
-            'sender': 'from'
+            'user': 'from'
         }
 
 

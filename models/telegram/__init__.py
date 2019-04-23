@@ -1,6 +1,7 @@
 from models.telegram.update import Message, TextMessage, StartCommand, DescriptionCommand
 from models.telegram.chat import Chat
 from models.telegram.send_message import SendMessage, ChatId, ParseMode
+from models.telegram.delete_message import DeleteMessage
 from models.telegram.keyboardbutton import (
     InlineKeyboardMarkup, InlineUrlButton,
     InlineCallbackButton, InlineKeyboardButton,
@@ -23,6 +24,7 @@ __all__ = [
     "Message",
     "TextMessage",
     "SendMessage",
+    "DeleteMessage",
     "StartCommand",
     "DescriptionCommand",
     "User",

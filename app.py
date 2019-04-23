@@ -261,42 +261,60 @@ async def github_auth_webhook(request):
         code = codes[0]
         document = await db.telegram.users.find_one(
             filter={
-                "metadata.authentication.state": state,
-                "metadata.authentication.link_status": mongo.MongoUserGithubLinking.not_linked.value
-            },
-            projection=["metadata"]
+                "auth.state": state
+            }
         )
 
         if document:
-            object_id = document['_id']
-            chat_id = document['metadata']['chat_id']
+            auth_status = document['auth']['status']
+            chat_id = document['settings']['privacy']['chat_id']
 
-            updated_metadata = mongo.MongoUserLinked(
-                code=code,
-                link_status=mongo.MongoUserGithubLinking.linked.value
-            )
-            result = await db.telegram.users.update_one(
-                filter={"_id": object_id},
-                update={
-                    "$set": {"metadata.authentication": updated_metadata.dict(skip_defaults=True)}
-                }
-            )
-            if result.acknowledged and result.modified_count == 1:
+            if auth_status == mongo.MongoUserAuthStatus.success.value:
                 await api.telegram.send_message(
-                    telegram.SendMessage,
                     chat_id=chat_id,
-                    text=emojize("*Success!* :clap:", use_aliases=True),
-                    parse_mode=telegram.ParseMode.markdown
-                )
-                # await show_telegram_bots()
-            else:
-                await api.telegram.send_message(
-                    telegram.SendMessage,
-                    chat_id=chat_id,
-                    text=emojize("Authorization failed :confused:",
+                    text=emojize("You are already successfully authorized :tada:",
                                  use_aliases=True),
                     parse_mode=telegram.ParseMode.markdown
                 )
+            else:
+                object_id = document['_id']
+                message_id = document['auth']['message_id']
+
+                # First we delete message with Authorization link from chat
+                await api.telegram.delete_message(
+                    chat_id=chat_id,
+                    message_id=message_id
+                )
+
+                auth = mongo.MongoUserAuthSuccess(
+                    code=code,
+                    status=mongo.MongoUserAuthStatus.success
+                )
+                result = await db.telegram.users.update_one(
+                    filter={"_id": object_id},
+                    update={
+                        "$set": {"auth": auth.dict(skip_defaults=True)}
+                    }
+                )
+                if result.acknowledged and result.modified_count == 1:
+                    await api.telegram.send_message(
+                        chat_id=chat_id,
+                        text=emojize(
+                            "Authorization *completed successfully* :clap:", use_aliases=True),
+                        parse_mode=telegram.ParseMode.markdown
+                    )
+                    await api.telegram.send_message(
+                        chat_id=chat_id,
+                        text="Now you can use other commands. Look at bot's /description",
+                        parse_mode=telegram.ParseMode.markdown
+                    )
+                else:
+                    await api.telegram.send_message(
+                        chat_id=chat_id,
+                        text=emojize("Authorization failed :confused:",
+                                     use_aliases=True),
+                        parse_mode=telegram.ParseMode.markdown
+                    )
 
     redirect_url = 'https://telegram.me/helvybot'
     return response.json(
@@ -397,7 +415,7 @@ async def telegram_webhook(request):
     payload = parse_telegram_payloads(request)
     if isinstance(payload, telegram.StartCommand):
 
-        obj = mongo.MongoUser.new_from(payload.sender, chat_id=payload.chat.id)
+        obj = mongo.MongoUser.new_from(payload.user, chat_id=payload.chat.id)
         result = await db.telegram.users.update_one(
             {"data.id": obj.data.id},
             {"$set": obj.dict(skip_defaults=True)},
@@ -529,50 +547,96 @@ async def telegram_webhook(request):
 @bot.handler(state=None, msg_type=telegram.StartCommand)
 async def start_command(update, set_context):
     message = update.message
-    obj = mongo.MongoUser.new_from(message.sender, chat_id=message.chat.id)
-    result = await db.telegram.users.update_one(
-        {"data.id": obj.data.id},
-        {"$set": obj.dict(skip_defaults=True)},
-        upsert=True
-    )
+    if message.chat.type != telegram.ChatType.private:
+        await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text="Authorization is only possible in *private* chats",
+            parse_mode=telegram.ParseMode.markdown
+        )
+    else:
+        document = await db.telegram.users.find_one(
+            filter={"user_id": message.user.id}
+        )
 
-    if not result.acknowledged:
-        return response.json({}, status=500)
+        if document:
+            auth_status = document['auth']['status']
+            if auth_status == mongo.MongoUserAuthStatus.success:
+                await api.telegram.send_message(
+                    chat_id=message.chat.id,
+                    text=emojize(
+                        "You are already *successfully* authorized :tada:",
+                        use_aliases=True
+                    ),
+                    parse_mode=telegram.ParseMode.markdown
+                )
+                return response.json({}, status=200)
 
-    await api.telegram.send_message(
-        telegram.SendMessage,
-        chat_id=message.chat.id,
-        text=await lang.welcome_intro,
-        parse_mode=telegram.ParseMode.markdown
-    )
+        # Create a new user with basic settings
+        user = mongo.MongoUser.new_from(
+            user_id=message.user.id,
+            chat_id=message.chat.id,
+            lang=message.user.language_code
+        )
+        result = await db.telegram.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": user.dict(skip_defaults=True)},
+            upsert=True
+        )
 
-    await api.telegram.send_message(
-        telegram.SendMessage,
-        chat_id=message.chat.id,
-        text=await lang.welcome_need_help,
-        parse_mode=telegram.ParseMode.markdown
-    )
+        if not result.acknowledged:
+            await api.telegram.send_message(
+                chat_id=message.chat.id,
+                text="Can't create user for you. Perhaps, something failed",
+                parse_mode=telegram.ParseMode.markdown
+            )
+            await api.telegram.send_message(
+                chat_id=message.chat.id,
+                text="Try /start command later",
+                parse_mode=telegram.ParseMode.markdown
+            )
+            return response.json({}, status=500)
 
-    await asyncio.sleep(1)
+        await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text=await lang.welcome_intro,
+            parse_mode=telegram.ParseMode.markdown
+        )
 
-    state = obj.metadata.authentication.state
-    url_button = telegram.InlineUrlButton(
-        text=await lang.welcome_authorization,
-        url=f'https://github.com/login/oauth/authorize?client_id={app.config.GITHUB_CLIENT_ID}&state={state}'
-    )
+        await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text=await lang.welcome_need_help,
+            parse_mode=telegram.ParseMode.markdown
+        )
 
-    keyboard_markup = telegram.InlineKeyboardMarkup(
-        inline_keyboard=[[url_button]])
+        await asyncio.sleep(1)
 
-    await api.telegram.send_message(
-        telegram.SendMessage,
-        chat_id=message.chat.id,
-        text=await lang.follow_link,
-        disable_web_page_preview=True,
-        reply_markup=keyboard_markup
-    )
+        state = user.auth.state
+        url_button = telegram.InlineUrlButton(
+            text=await lang.welcome_authorization,
+            url=f'https://github.com/login/oauth/authorize?client_id={app.config.GITHUB_CLIENT_ID}&state={state}'
+        )
 
-    return response.json({}, status=200)
+        keyboard_markup = telegram.InlineKeyboardMarkup(
+            inline_keyboard=[[url_button]])
+
+        result = await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text=await lang.follow_link,
+            disable_web_page_preview=True,
+            reply_markup=keyboard_markup
+        )
+
+        # Save message_id for Authorization link
+        # Later we want to delete this message
+        result = await db.telegram.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": {"auth.message_id": result["result"]["message_id"]}}
+        )
+
+        if not result.acknowledged:
+            return response.json({}, status=500)
+
+        return response.json({}, status=200)
 
 
 @bot.handler(state=None, msg_type=telegram.DescriptionCommand)

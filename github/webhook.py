@@ -18,6 +18,6 @@ async def github(request):
     # Schedule to process telegram update
     # app.add_task(process_text_message(update.message.dict(skip_defaults=True)))
     app.add_task(process_text_message(update.message))
-    app.add_task(create_if_new_user(update.message.sender))
+    app.add_task(create_if_new_user(update.message.user))
 
     return json({}, status=status)
