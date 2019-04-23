@@ -72,11 +72,11 @@ class MongoContext(pytebot.Context):
             return document['state']
         return document
 
-    async def set(self, chat_id, value):
+    async def set(self, chat_id, state):
         result = await self._collection.update_one(
             filter={"chat_id": chat_id},
             update={
-                "$set": {"state": value}
+                "$set": {"state": state}
             },
             upsert=True
         )
@@ -655,6 +655,41 @@ async def description_command(update, set_context):
     #     return response.json({}, status=500)
 
 
+@bot.handler(state=ChatState.description_command, msg_type=telegram.TextMessage)
+async def show_bot_description(update, set_context):
+    message = update.message
+
+    if message.text == "Stale Bot":
+        text = await lang.description_stale_bot
+        await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text=text
+        )
+        await set_context(message.chat.id, state=None)
+    else:
+        await api.telegram.send_message(
+            chat_id=message.chat.id,
+            text=f"Bot with name *{message.text}* doesn't exist",
+        )
+
+    # await api.telegram.send_message(
+    #     chat_id=message.chat.id,
+    #     text=await,
+    #     parse_mode=telegram.ParseMode.markdown
+    # )
+    # await show_telegram_bots()
+    return response.json({}, status=200)
+    # obj = mongo.MongoUser.new_from(message.sender, chat_id=message.chat.id)
+    # result = await db.telegram.users.update_one(
+    #     {"data.id": obj.data.id},
+    #     {"$set": obj.dict(skip_defaults=True)},
+    #     upsert=True
+    # )
+
+    # if not result.acknowledged:
+    #     return response.json({}, status=500)
+
+
 @app.route("/", methods=['POST'])
 async def telegram_webhook(request):
     chat_id = request.json['message']['chat']['id']
@@ -674,7 +709,8 @@ async def show_telegram_bots():
         text='Stale Bot')
     keyboard_markup = telegram.ReplyKeyboardMarkup(
         keyboard=[[stale_button]],
-        resize_keyboard=True
+        resize_keyboard=True,
+        one_time_keyboard=True
     )
 
     await api.telegram.send_message(

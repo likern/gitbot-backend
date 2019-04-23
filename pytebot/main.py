@@ -39,7 +39,7 @@ class TelegramBot:
                              and msg_type [{msg_type}] is prohibited"
                     )
                 else:
-                    self._handlers[state].append({msg_type: wrapped})
+                    self._handlers[state] = [(msg_type, wrapped)]
 
             return wrapped
         return internal_function
@@ -66,15 +66,16 @@ class TelegramBot:
         else:
             handlers = self._handlers.get(state)
             if handlers:
-                for (msg_type, closure) in handlers.items():
+                for (msg_type, closure) in handlers:
                     try:
                         model = msg_type.parse_obj(payload)
                         func = closure
                         break
                     except pydantic.ValidationError:
                         continue
-
-                raise NoHandlerError("No handlers found for payload", payload)
+                else:
+                    raise NoHandlerError(
+                        "No handlers found for payload", payload)
             else:
                 raise NoHandlerError("No handlers found for payload", payload)
 
@@ -85,6 +86,9 @@ class TelegramBot:
         if not issubclass(obj_type, telegram.SendMessage):
             raise TypeError(
                 f"{obj_type} should be subclass of telegram.SendMessage")
+
+        if 'parse_mode' not in kwargs:
+            kwargs['parse_mode'] = telegram.ParseMode.markdown
 
         model = obj_type(**kwargs)
         json_payload = model.dict(skip_defaults=True)
