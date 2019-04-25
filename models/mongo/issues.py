@@ -5,29 +5,40 @@ from pydantic import BaseModel, validator
 from models import github
 
 
-class MongoIssueMetadata(BaseModel):
-    when_stale: datetime
+class MongoIssueActionStatus(str, Enum):
+    mark_stale = 'mark_stale'
+    close_issue = 'close_issue'
 
-    @validator('when_stale')
-    def check_datetime_is_utc(cls, value):
-        return value
+    class Config:
+        use_enum_values = True
+
+
+class MongoIssueAction(BaseModel):
+    status: MongoIssueActionStatus
+    date: datetime
 
 
 class MongoIssue(BaseModel):
-    data: Any
-    metadata: Optional[MongoIssueMetadata]
+    issue_id: int
+    repo_id: int
+    owner_id: int
+    action: MongoIssueAction
 
     @staticmethod
-    def new_from(*, data: github.IssueEvent, metadata: MongoIssueMetadata = None):
-        if metadata is None:
-            stale_date = datetime.utcnow() + timedelta(minutes=1)
-            metadata = {'when_stale': stale_date}
+    def new_from(issue_id: int, repo_id: int, owner_id: int):
+        utcnow = datetime.utcnow()
+        print(f"Current datetime: [{utcnow}]")
+        stale_date = utcnow + timedelta(minutes=1)
+        print(f"Stale datetime: [{stale_date}]")
 
-        if not isinstance(data, github.IssueEvent):
-            raise TypeError(
-                f'data should be of [github.IssueEvent] type')
+        action = MongoIssueAction(
+            status=MongoIssueActionStatus.mark_stale,
+            date=stale_date
+        )
 
-        return MongoIssue.parse_obj({
-            'data': data,
-            'metadata': metadata
-        })
+        return MongoIssue(
+            issue_id=issue_id,
+            repo_id=repo_id,
+            owner_id=owner_id,
+            action=action
+        )

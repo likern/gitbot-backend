@@ -1,6 +1,6 @@
 from models.mongo.issues import MongoIssue
 from models.mongo.user import (
-    MongoUser, MongoUserAuthStatus, MongoUserAuthSuccess, MongoUserAuthPending
+    MongoUser, MongoUserAuthStatus, MongoUserAuthSuccess, MongoUserAuthPending, MongoGitHubUser
 )
 
 

@@ -12,6 +12,7 @@ from enum import Enum, EnumMeta
 # import contextvars
 from contextvars import Context, copy_context
 from sanic.handlers import ErrorHandler
+from bots import StaleBot
 
 
 from models import github, mongo, telegram
@@ -96,6 +97,11 @@ async def init(app, loop):
     global bot
     global lang
 
+    print("JWT TOKEN:")
+    print("==================")
+    print(f"{app.config.GITHUB_GWT_TOKEN}")
+    print("==================")
+
     app.clients = SimpleNamespace(
         github=helpers.get_aiohttp_client_for_github(
             jwt_token=app.config.GITHUB_GWT_TOKEN, loop=loop),
@@ -113,7 +119,8 @@ async def init(app, loop):
         users=database.telegram['users'],
         logs=database.telegram['logs'],
         contexts=database.telegram['contexts'],
-        dialogs=database.telegram['dialogs']
+        dialogs=database.telegram['dialogs'],
+        issues=database.telegram['issues']
     )
 
     lang = Intl(db.telegram.dialogs, db.telegram.users)
@@ -128,6 +135,11 @@ async def init(app, loop):
     api = SimpleNamespace(
         telegram=telegram
     )
+
+    # Schedule Stale Bot to run
+    # app.stale_bot = StaleBot(db.telegram.issues)
+    # asyncio.create_task(app.stale_bot.mark_stale_issues())
+    # asyncio.create_task(app.stale_bot.close_stale_issues())
 
 
 @app.listener('after_server_stop')
@@ -170,10 +182,13 @@ async def finish(app, loop):
 #         await api.telegram.send_message(chat_id, "Справочная информация")
 
 
-# def parse_github_payloads(request):
-#     data = request.json
-#     if data['issue']:
-#         return github.IssueEvent.parse_obj(data)
+def parse_github_payloads(request):
+    data = request.json
+    print("GITHUB WEBHOOK DATA:")
+    print(data)
+
+    if 'issue' in data:
+        return github.IssueEvent.parse_obj(data)
 
 
 # @app.route("/github/setup_url", methods=['GET', 'POST'])
@@ -278,43 +293,133 @@ async def github_auth_webhook(request):
                 )
             else:
                 object_id = document['_id']
-                message_id = document['auth']['message_id']
 
                 # First we delete message with Authorization link from chat
-                await api.telegram.delete_message(
-                    chat_id=chat_id,
-                    message_id=message_id
-                )
+                # And related messages
+                for msg_id in document['auth']['message_ids']:
+                    await api.telegram.delete_message(
+                        chat_id=chat_id,
+                        message_id=msg_id
+                    )
 
-                auth = mongo.MongoUserAuthSuccess(
-                    code=code,
-                    status=mongo.MongoUserAuthStatus.success
+                # Exchange code and state to access_token
+                url_access_token = (
+                    f"https://github.com/login/oauth/access_token?"
+                    f"client_id={app.config.GITHUB_CLIENT_ID}&"
+                    f"client_secret={app.config.GITHUB_CLIENT_SECRET}&"
+                    f"code={code}&state={state}"
                 )
-                result = await db.telegram.users.update_one(
-                    filter={"_id": object_id},
-                    update={
-                        "$set": {"auth": auth.dict(skip_defaults=True)}
+                print(url_access_token)
+
+                headers = {'Accept': 'application/json'}
+                access_token_url = 'https://github.com/login/oauth/access_token'
+
+                async with app.clients.github.post(url_access_token, headers=headers) as resp:
+                    assert resp.status == 200
+                    token_payload = await resp.json()
+                    if 'error' in token_payload:
+                        print("GitHub Error:")
+                        print(token_payload)
+                        await api.telegram.send_message(
+                            chat_id=chat_id,
+                            text=emojize(
+                                "Authorization failed :confused:", use_aliases=True),
+                            parse_mode=telegram.ParseMode.markdown
+                        )
+                        redirect_url = 'https://telegram.me/helvybot'
+                        return response.json(
+                            {},
+                            # headers={'Location': redirect_url},
+                            status=200
+                        )
+                    else:
+                        print("GitHub Access Token:")
+                        print(token_payload)
+
+                    headers = {
+                        'Accept': 'application/vnd.github.machine-man-preview+json',
+                        'Authorization': f"token {token_payload['access_token']}"
                     }
-                )
-                if result.acknowledged and result.modified_count == 1:
-                    await api.telegram.send_message(
-                        chat_id=chat_id,
-                        text=emojize(
-                            "Authorization *completed successfully* :clap:", use_aliases=True),
-                        parse_mode=telegram.ParseMode.markdown
-                    )
-                    await api.telegram.send_message(
-                        chat_id=chat_id,
-                        text="Now you can use other commands. Look at bot's /description",
-                        parse_mode=telegram.ParseMode.markdown
-                    )
-                else:
-                    await api.telegram.send_message(
-                        chat_id=chat_id,
-                        text=emojize("Authorization failed :confused:",
-                                     use_aliases=True),
-                        parse_mode=telegram.ParseMode.markdown
-                    )
+                    user_url = 'https://api.github.com/user'
+
+                    async with app.clients.github.get(user_url, headers=headers) as resp:
+                        assert resp.status == 200
+                        user_payload = await resp.json()
+
+                        github_user = mongo.MongoGitHubUser(
+                            user_id=user_payload['id'],
+                            login=user_payload['login'],
+                            name=user_payload['name']
+                        )
+
+                        auth = mongo.MongoUserAuthSuccess(
+                            token=token_payload['access_token'],
+                            type=token_payload['token_type'],
+                            github=github_user,
+                            status=mongo.MongoUserAuthStatus.success
+                        )
+
+                        result = await db.telegram.users.update_one(
+                            filter={"_id": object_id},
+                            update={
+                                "$set": {"auth": auth.dict(skip_defaults=True)}
+                            }
+                        )
+
+                        if result.acknowledged and result.modified_count == 1:
+
+                            await api.telegram.send_message(
+                                chat_id=chat_id,
+                                text=emojize(
+                                    "Authorization *completed* :clap:", use_aliases=True),
+                                parse_mode=telegram.ParseMode.markdown
+                            )
+
+                            await api.telegram.send_message(
+                                chat_id=chat_id,
+                                text=emojize(
+                                    f"*On GitHub* I will act with *rights of user* "
+                                    f"[ name: [{github_user.name}], login: [{github_user.login}] ]",
+                                    use_aliases=True),
+                                parse_mode=telegram.ParseMode.markdown
+                            )
+
+                            url_button = telegram.InlineUrlButton(
+                                text='Installation',
+                                url=f'https://github.com/apps/helvy-ai/installations/new'
+                            )
+
+                            keyboard_markup = telegram.InlineKeyboardMarkup(
+                                inline_keyboard=[[url_button]])
+
+                            install_text = (
+                                "Now you need to *install Helvy.ai* for your *GitHub organization* "
+                                "or personal account. Follow this link"
+                            )
+                            await api.telegram.send_message(
+                                chat_id=chat_id,
+                                text=install_text,
+                                disable_web_page_preview=True,
+                                reply_markup=keyboard_markup
+                            )
+
+                            # await api.telegram.send_message(
+                            #     chat_id=chat_id,
+                            #     text="Now you need to install into your organization",
+                            #     parse_mode=telegram.ParseMode.markdown
+                            # )
+                            # await api.telegram.send_message(
+                            #     chat_id=chat_id,
+                            #     text="Now you can use other commands. Look at bot's /description",
+                            #     parse_mode=telegram.ParseMode.markdown
+                            # )
+        else:
+            await api.telegram.send_message(
+                chat_id=chat_id,
+                text=emojize("Authorization failed :confused:",
+                             use_aliases=True),
+                parse_mode=telegram.ParseMode.markdown
+            )
 
     redirect_url = 'https://telegram.me/helvybot'
     return response.json(
@@ -370,43 +475,32 @@ async def github_webhook(request):
     print("[GITHUB] [WEBHOOK] INCOMING BODY:")
     print(json.dumps(request.json, indent=2, sort_keys=True))
 
-    return response.json({}, status=200)
     payload = parse_github_payloads(request)
 
     if isinstance(payload, github.IssueEvent):
         if payload.action == github.IssueAction.opened:
-            obj = mongo.MongoIssue.new_from(data=payload)
-            result = await db.github.issues.update_one(
-                {"data.issue.id": obj.data.issue['id']},
-                {"$setOnInsert": obj.dict(skip_defaults=True)},
+            issue = mongo.MongoIssue.new_from(issue_id=payload.issue['id'])
+            result = await db.telegram.issues.update_one(
+                {"issue_id": issue.issue_id},
+                {"$set": issue.dict(skip_defaults=True)},
                 upsert=True
             )
-
             print(f"[GITHUB] [Issues] event was saved")
+        else:
+            print(f"[GITHUB] [Issues] other event happened")
 
-    # issue_event = github.issues.IssueEvent.parse_obj(request.json)
-    # update = Update.parse_obj(request.json)
-
-    # result = await db.updates.update_one(
-    #     {"update_id": update.update_id},
-    #     {"$setOnInsert": update.dict(skip_defaults=True)},
-    #     upsert=True
-    # )
-    # print(f"[GITHUB] [Issues] event was fired")
-    # print(f"[GITHUB] [Issues] event was fired [{result.acknowledged}]")
-
-    status = None
-    if result.acknowledged:
-        status = 200
-    else:
-        status = 502
+    # status = None
+    # if result.acknowledged:
+    #     status = 200
+    # else:
+    #     status = 502
 
     # Schedule to process telegram update
     # app.add_task(process_text_message(update.message.dict(skip_defaults=True)))
     # app.add_task(process_text_message(update.message))
     # app.add_task(create_if_new_user(update.message.sender))
 
-    return response.json({}, status=status)
+    return response.json({}, status=200)
 
 
 async def telegram_webhook(request):
@@ -602,11 +696,12 @@ async def start_command(update, set_context):
             parse_mode=telegram.ParseMode.markdown
         )
 
-        await api.telegram.send_message(
+        result = await api.telegram.send_message(
             chat_id=message.chat.id,
             text=await lang.welcome_need_help,
             parse_mode=telegram.ParseMode.markdown
         )
+        msg1_id = result["result"]["message_id"]
 
         await asyncio.sleep(1)
 
@@ -625,12 +720,13 @@ async def start_command(update, set_context):
             disable_web_page_preview=True,
             reply_markup=keyboard_markup
         )
+        msg2_id = result["result"]["message_id"]
 
         # Save message_id for Authorization link
         # Later we want to delete this message
         result = await db.telegram.users.update_one(
             {"user_id": user.user_id},
-            {"$set": {"auth.message_id": result["result"]["message_id"]}}
+            {"$set": {"auth.message_ids": [msg1_id, msg2_id]}}
         )
 
         if not result.acknowledged:

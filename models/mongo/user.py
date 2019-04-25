@@ -12,8 +12,16 @@ class MongoUserAuthStatus(str, Enum):
     success = 'success'
 
 
+class MongoGitHubUser(BaseModel):
+    user_id: int
+    login: str
+    name: str
+
+
 class MongoUserAuthSuccess(BaseModel):
-    code: str
+    token: str
+    type: str
+    github: MongoGitHubUser
     status: MongoUserAuthStatus = MongoUserAuthStatus.success
 
     class Config:
