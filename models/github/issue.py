@@ -27,3 +27,15 @@ class IssueEvent(BaseModel):
     changes: Optional[Any]
     assignee: Optional[Any]
     label: Optional[Any]
+
+
+class IssueOpened(IssueEvent):
+    action: IssueAction = IssueAction.opened
+
+
+class IssueEdited(IssueEvent):
+    action: IssueAction = IssueAction.opened
+
+
+class IssueClosed(IssueEvent):
+    action: IssueAction = IssueAction.closed

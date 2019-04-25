@@ -4,7 +4,7 @@ from pydantic import BaseModel
 class Account(BaseModel):
     id: int
     avatar_url: str
-    events_url: str,
+    events_url: str
     followers_url: str
     following_url: str
     gists_url: str

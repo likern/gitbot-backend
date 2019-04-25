@@ -27,6 +27,8 @@ from intl import Intl
 from bson.objectid import ObjectId
 
 import pytebot
+import githook
+import webhooks
 
 # class TelegramErrorHandler(ErrorHandler):
 # 	def default(self, request, exception):
@@ -123,6 +125,10 @@ async def init(app, loop):
         issues=database.telegram['issues']
     )
 
+    # Finish creating webhooks here
+    # because they require http_client
+    webhooks.github.http_client = app.clients.github
+
     lang = Intl(db.telegram.dialogs, db.telegram.users)
     bot.context = MongoContext(ChatState, db.telegram.contexts)
     bot.http_client = app.clients.telegram
@@ -180,15 +186,6 @@ async def finish(app, loop):
 #     print(f"Chat id: [{chat_id}]")
 #     if text_message.text == "/help":
 #         await api.telegram.send_message(chat_id, "Справочная информация")
-
-
-def parse_github_payloads(request):
-    data = request.json
-    print("GITHUB WEBHOOK DATA:")
-    print(data)
-
-    if 'issue' in data:
-        return github.IssueEvent.parse_obj(data)
 
 
 # @app.route("/github/setup_url", methods=['GET', 'POST'])
@@ -463,44 +460,6 @@ async def github_auth_webhook(request):
     # app.add_task(process_text_message(update.message.dict(skip_defaults=True)))
     # app.add_task(process_text_message(update.message))
     # app.add_task(create_if_new_user(update.message.sender))
-
-
-@app.route("/github", methods=['POST'])
-async def github_webhook(request):
-
-    print("[GITHUB] [WEBHOOK] QUERY PARAMS:")
-    print(request.args)
-    print("[GITHUB] [WEBHOOK] HEADERS:")
-    print(request.headers)
-    print("[GITHUB] [WEBHOOK] INCOMING BODY:")
-    print(json.dumps(request.json, indent=2, sort_keys=True))
-
-    payload = parse_github_payloads(request)
-
-    if isinstance(payload, github.IssueEvent):
-        if payload.action == github.IssueAction.opened:
-            issue = mongo.MongoIssue.new_from(issue_id=payload.issue['id'])
-            result = await db.telegram.issues.update_one(
-                {"issue_id": issue.issue_id},
-                {"$set": issue.dict(skip_defaults=True)},
-                upsert=True
-            )
-            print(f"[GITHUB] [Issues] event was saved")
-        else:
-            print(f"[GITHUB] [Issues] other event happened")
-
-    # status = None
-    # if result.acknowledged:
-    #     status = 200
-    # else:
-    #     status = 502
-
-    # Schedule to process telegram update
-    # app.add_task(process_text_message(update.message.dict(skip_defaults=True)))
-    # app.add_task(process_text_message(update.message))
-    # app.add_task(create_if_new_user(update.message.sender))
-
-    return response.json({}, status=200)
 
 
 async def telegram_webhook(request):
@@ -786,6 +745,14 @@ async def show_bot_description(update, set_context):
     #     return response.json({}, status=500)
 
 
+# This webhook processes incoming GitHub events
+@app.route("/github", methods=['POST'])
+async def github_webhook(request):
+    return await webhooks.github.webhook(request)
+    # return response.json({}, status=200)
+
+
+# This webhook processes incoming Telegram events
 @app.route("/", methods=['POST'])
 async def telegram_webhook(request):
     chat_id = request.json['message']['chat']['id']

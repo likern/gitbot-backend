@@ -1,9 +1,9 @@
 from enum import Enum
 from typing import Any, Optional, Union, List
 from pydantic import BaseModel
-from account import Account
-from repository import Repository
-from sender import Sender
+from .account import Account
+from .repository import Repository
+from .sender import Sender
 
 
 class InstallationAction(str, Enum):

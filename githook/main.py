@@ -4,10 +4,9 @@ from models import telegram
 from .exceptions import NoHandlerError, MultipleHandlerError
 import aiohttp
 import pydantic
-# from pydantic import ValidationError
 import json
 from .context import Context
-BASE_URL = "https://api.telegram.org/bot"
+BASE_URL = "https://api.github.com"
 
 
 class GitHub:
@@ -19,7 +18,7 @@ class GitHub:
         self._handlers = {}
         self._none_handlers = {}
 
-    def handler(self, state, msg_type: pydantic.BaseModel):
+    def handler(self, msg_type: pydantic.BaseModel, state=None):
         def internal_function(func):
             async def wrapped(message):
                 return await func(message, self.context.set)
@@ -51,9 +50,9 @@ class GitHub:
 
         model = None
         func = None
-        state = await self.context.get(payload['message']['chat']['id'])
+        state = await self.context.get()
         if state is None:
-                # iterate over all types
+            # iterate over all types
             for (msg_type, closure) in self._none_handlers.items():
                 try:
                     model = msg_type.parse_obj(payload)

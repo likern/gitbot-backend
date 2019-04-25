@@ -2,7 +2,6 @@ from enum import Enum
 from datetime import datetime, timedelta
 from typing import Any, Optional, Union, Mapping
 from pydantic import BaseModel, validator
-from models import github
 
 
 class MongoIssueActionStatus(str, Enum):

@@ -113,23 +113,3 @@ class TelegramBot:
             json = await resp.json()
             return json
             print(f"Response body: [{json}]")
-
-
-# class Telegram:
-#     def __init__(self, base_url=BASE_URL, *, token, client):
-#         self.base_url = f"{base_url}{token}/"
-#         self._client = client
-
-#     async def send_message(self, type, *args, **kwargs):
-
-#         if not issubclass(type, telegram.SendMessage):
-#             raise TypeError(
-#                 f"{type} should be subclass of telegram.SendMessage")
-
-#         model = type.parse_obj(*args, **kwargs)
-#         json_payload = model.dict(skip_defaults=True)
-#         url = f"{self.base_url}sendMessage"
-#         async with self._client.post(url, json=json_payload) as resp:
-#             print(f"Response status [{resp.status}]")
-#             json = await resp.json()
-#             print(f"Response body: [{json}]")

@@ -2,23 +2,19 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 
-class FinalMeta(type(ABC), type(Enum)):
-    pass
-
-
 class Context(ABC):
     @abstractmethod
-    def get(self, chat_id):
+    def get(self):
         pass
 
     @abstractmethod
-    def set(self, chat_id, state):
+    def set(self):
         pass
 
 
 class NoneContext(Context):
-    def get(self):
+    async def get(self):
         return None
 
-    def set(self):
+    async def set(self):
         pass
