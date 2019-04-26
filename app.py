@@ -125,10 +125,6 @@ async def init(app, loop):
         issues=database.telegram['issues']
     )
 
-    # Finish creating webhooks here
-    # because they require http_client
-    webhooks.github.http_client = app.clients.github
-
     lang = Intl(db.telegram.dialogs, db.telegram.users)
     bot.context = MongoContext(ChatState, db.telegram.contexts)
     bot.http_client = app.clients.telegram
@@ -141,6 +137,11 @@ async def init(app, loop):
     api = SimpleNamespace(
         telegram=telegram
     )
+
+    # Finish creating webhooks here
+    # because they require http_client
+    webhooks.github.http_client = app.clients.github
+    webhooks.github.db = db
 
     # Schedule Stale Bot to run
     # app.stale_bot = StaleBot(db.telegram.issues)

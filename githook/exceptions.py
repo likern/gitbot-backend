@@ -22,3 +22,7 @@ class NoHandlerError(GitHubError):
 
 class MultipleHandlerError(GitHubError):
     pass
+
+
+class MultipleMiddlewareError(GitHubError):
+    pass

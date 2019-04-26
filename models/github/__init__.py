@@ -1,4 +1,4 @@
-from models.github.issue import IssueAction, IssueOpened, IssueClosed
+from models.github.issue import IssueEvent, IssueAction, IssueOpened, IssueClosed, IssueEdited
 
 __version__ = "0.0.1"
 

@@ -1,11 +1,15 @@
-from models.telegram import SendMessage, ChatId
+from typing import List
 from functools import wraps
-from models import telegram
-from .exceptions import NoHandlerError, MultipleHandlerError
+import json
+
 import aiohttp
 import pydantic
-import json
+
+from models.telegram import SendMessage, ChatId
+from models import telegram
+from .exceptions import NoHandlerError, MultipleHandlerError, MultipleMiddlewareError
 from .context import Context
+
 BASE_URL = "https://api.github.com"
 
 
@@ -17,6 +21,8 @@ class GitHub:
         self.context = context
         self._handlers = {}
         self._none_handlers = {}
+        self._middlewares = {}
+        self._none_middlewares = {}
 
     def handler(self, msg_type: pydantic.BaseModel, state=None):
         def internal_function(func):
@@ -43,6 +49,38 @@ class GitHub:
             return wrapped
         return internal_function
 
+    def middleware(self, msg_types: List[pydantic.BaseModel], state=None):
+        def internal_function(func):
+            async def wrapped(message):
+                return await func(message)
+
+            if state is None:
+                for msg_type in msg_types:
+                    if msg_type in self._none_middlewares:
+                        raise MultipleMiddlewareError(
+                            f"Register multiple middlewares for the same msg_type [{msg_type}] is prohibited"
+                        )
+                    else:
+                        self._none_middlewares[msg_type] = wrapped
+            else:
+                state_middleware = self._middlewares.get(state)
+                if state_middleware is None:
+                    state_middleware = []
+                    for msg_type in msg_types:
+                        state_middleware.append((msg_type, wrapped))
+                    self._middlewares[state] = state_middleware
+                else:
+                    for msg_type in msg_types:
+                        for (exist_msg_type, func) in state_middleware:
+                            if msg_type == exist_msg_type:
+                                raise MultipleMiddlewareError(
+                                    f"Register multiple middlewares for the same msg_type [{msg_type}] is prohibited"
+                                )
+                        state_middleware.append((msg_type, wrapped))
+
+            return wrapped
+        return internal_function
+
     async def webhook(self, request):
         print("GITHUB INCOMING WEBHOOK JSON:")
         print(json.dumps(request.json, indent=2, sort_keys=True))
@@ -52,6 +90,15 @@ class GitHub:
         func = None
         state = await self.context.get()
         if state is None:
+            for (msg_type, middleware) in self._none_middlewares.items():
+                try:
+                    model = msg_type.parse_obj(payload)
+                    await middleware(model)
+                    break
+                except pydantic.ValidationError as err:
+                    continue
+
+
             # iterate over all types
             for (msg_type, closure) in self._none_handlers.items():
                 try:
@@ -63,6 +110,16 @@ class GitHub:
             else:
                 raise NoHandlerError("No handlers found for payload", payload)
         else:
+            middlewares = self._middlewares.get(state)
+            if middlewares:
+                for (msg_type, middleware) in middlewares:
+                    try:
+                        model = msg_type.parse_obj(payload)
+                        await middleware(model)
+                        break
+                    except pydantic.ValidationError:
+                        continue            
+
             handlers = self._handlers.get(state)
             if handlers:
                 for (msg_type, closure) in handlers:
