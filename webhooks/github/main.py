@@ -12,7 +12,7 @@ from models.github.issue import IssueEvent, IssueOpened, IssueClosed, IssueEdite
 webhook = GitHub(None, context=NoneContext())
 
 
-@webhook.middleware(msg_types=[IssueEvent])
+@webhook.middleware(IssueEvent)
 async def issue_event(issue: IssueEvent):
     result = await webhook.db.github.issues.insert_one(issue.dict(skip_defaults=True))
     if not result.acknowledged:
@@ -22,7 +22,7 @@ async def issue_event(issue: IssueEvent):
     print(f"[GITHUB] NEW ISSUE EVENT WAS SAVED WITH ID: [{result.inserted_id}]")
 
 
-@webhook.handler(msg_type=InstallationCreated)
+@webhook.handler(InstallationCreated)
 async def installation_created(event: InstallationCreated, set_context):
     print("[GIHUB] [WEBHOOK] [INSTALLATION CREATED]")
     print(event.to_string(pretty=True))
@@ -30,7 +30,7 @@ async def installation_created(event: InstallationCreated, set_context):
     return response.json({}, status=200)
 
 
-@webhook.handler(msg_type=IssueOpened)
+@webhook.handler(IssueOpened)
 async def installation_created(event: IssueOpened, set_context):
     print("[GIHUB] [WEBHOOK] [ISSUE OPENED]")
     print(event.to_string(pretty=True))
@@ -45,12 +45,12 @@ async def installation_created(event: IssueOpened, set_context):
     return response.json({}, status=200)
 
 
-@webhook.handler(msg_type=IssueClosed)
+@webhook.handler(IssueClosed)
 async def installation_created(event: IssueClosed, set_context):
     print("[GIHUB] [WEBHOOK] [ISSUE CLOSED]")
     print(event.to_string(pretty=True))
 
-@webhook.handler(msg_type=IssueEdited)
+@webhook.handler(IssueEdited)
 async def installation_created(event: IssueEdited, set_context):
     print("[GIHUB] [WEBHOOK] [ISSUE EDITED]")
     print(event.to_string(pretty=True))

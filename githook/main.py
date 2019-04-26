@@ -1,9 +1,11 @@
-from typing import List
+from typing import List, Iterable, Union
 from functools import wraps
+import inspect
 import json
 
 import aiohttp
 import pydantic
+from pydantic import BaseModel
 
 from models.telegram import SendMessage, ChatId
 from models import telegram
@@ -49,13 +51,31 @@ class GitHub:
             return wrapped
         return internal_function
 
-    def middleware(self, msg_types: List[pydantic.BaseModel], state=None):
+    def middleware(self, type: Union[BaseModel, Iterable[BaseModel]], *, state=None):
+        message_types = None
+        if issubclass(type, pydantic.BaseModel):
+            message_types = [type]
+        elif issubclass(type, Iterable):
+            for item in type:
+                if not issubclass(item, pydantic.BaseModel):
+                    raise TypeError(f"Type [{item}] should be subclass of [BaseModel] type")
+            message_types = type
+        else:
+            raise TypeError(f"Type [{item}] should be subclass of [BaseModel] or [Iterable[BaseModel]] type")
+
         def internal_function(func):
             async def wrapped(message):
                 return await func(message)
 
+            if not inspect.iscoroutinefunction(func):
+                raise TypeError(
+                    f"function [{func.__qualname__}] is not asynchronous"
+                )
+            # FIXME Continue implementation
+            # with ability to pass middleware as parameter to handler
+
             if state is None:
-                for msg_type in msg_types:
+                for msg_type in message_types:
                     if msg_type in self._none_middlewares:
                         raise MultipleMiddlewareError(
                             f"Register multiple middlewares for the same msg_type [{msg_type}] is prohibited"
@@ -66,11 +86,11 @@ class GitHub:
                 state_middleware = self._middlewares.get(state)
                 if state_middleware is None:
                     state_middleware = []
-                    for msg_type in msg_types:
+                    for msg_type in message_types:
                         state_middleware.append((msg_type, wrapped))
                     self._middlewares[state] = state_middleware
                 else:
-                    for msg_type in msg_types:
+                    for msg_type in message_types:
                         for (exist_msg_type, func) in state_middleware:
                             if msg_type == exist_msg_type:
                                 raise MultipleMiddlewareError(

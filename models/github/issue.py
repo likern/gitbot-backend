@@ -151,7 +151,7 @@ class IssueEvent(BaseModel):
     label: Optional[Any]
     repository: IssueRepository
     sender: IssueSender
-    installation: 
+    installation: IssueInstallation
 
 class IssueOpened(IssueEvent):
     action: IssueAction = IssueAction.opened
