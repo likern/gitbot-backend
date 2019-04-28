@@ -23,7 +23,7 @@ async def issue_event(issue: IssueEvent):
 
 
 @webhook.handler(InstallationCreated)
-async def installation_created(event: InstallationCreated, set_context):
+async def installation_created(event: InstallationCreated, *args):
     print("[GIHUB] [WEBHOOK] [INSTALLATION CREATED]")
     print(event.to_string(pretty=True))
 
@@ -31,7 +31,7 @@ async def installation_created(event: InstallationCreated, set_context):
 
 
 @webhook.handler(IssueOpened)
-async def installation_created(event: IssueOpened, set_context):
+async def installation_created(event: IssueOpened, middleware):
     print("[GIHUB] [WEBHOOK] [ISSUE OPENED]")
     print(event.to_string(pretty=True))
 

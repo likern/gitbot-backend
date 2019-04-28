@@ -26,3 +26,6 @@ class MultipleHandlerError(GitHubError):
 
 class MultipleMiddlewareError(GitHubError):
     pass
+
+class MiddlewareSignatureError(GitHubError):
+    pass

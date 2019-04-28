@@ -1,6 +1,8 @@
 from typing import List, Iterable, Union
-from functools import wraps
+from functools import wraps, partial
+from collections import defaultdict
 import inspect
+from inspect import signature
 import json
 
 import aiohttp
@@ -9,153 +11,243 @@ from pydantic import BaseModel
 
 from models.telegram import SendMessage, ChatId
 from models import telegram
-from .exceptions import NoHandlerError, MultipleHandlerError, MultipleMiddlewareError
-from .context import Context
+from .exceptions import NoHandlerError, MultipleHandlerError, MultipleMiddlewareError, MiddlewareSignatureError
+from .context import Context, NoneContext
 
 BASE_URL = "https://api.github.com"
 
 
 class GitHub:
-    def __init__(self, token: str, context: Context = None, http_client: aiohttp.ClientSession = None, base_url: str = BASE_URL):
+    def __init__(self, token: str, context: Context = NoneContext, http_client: aiohttp.ClientSession = None, base_url: str = BASE_URL):
+        self._allowed_handler_args = ["middleware", "set_context"]
         self._token = token
         self._base_url = f"{base_url}{token}/"
         self.http_client = http_client
         self.context = context
-        self._handlers = {}
-        self._none_handlers = {}
-        self._middlewares = {}
-        self._none_middlewares = {}
+        self._handlers = defaultdict(dict)
+        self._middlewares = defaultdict(dict)
+        self._middleware_for_handler = defaultdict(dict)
+
+
+    async def _raise_exception(func):
+                raise ValueError(f"Function [{func.__qualname__}] shouldn't be called directly")
+
+    def _build_subclass_hierarchy():
+        for (state, state_handlers_info) in self._handlers.items():
+                state_middlewares_info = self._middlewares[state]
+                for (message_handler, handler_info) in state_handlers_info.items():
+                    for (message_middleware, middleware_info) in state_middlewares_info.items():
+                        if issubclass(message_handler, message_middleware):
+                            if self._middleware_for_handler[state].get(handler_info.coro):
+                                raise MultipleMiddlewareError(
+                                    f"Found multiple middlewares for handler [{handler_info.coro.__qualname__}]"
+                                )
+                            self._middleware_for_handler[state][handler_info.coro] = middleware_info.coro
+            
+
+    def _check_types(message_type) -> Iterable[BaseModel]:
+        if issubclass(type, pydantic.BaseModel):
+            return [message_type]
+        elif issubclass(type, Iterable):
+            for item in message_type:
+                if not issubclass(item, pydantic.BaseModel):
+                    raise TypeError(f"Type [{item}] should be subclass of [BaseModel] type")
+            return message_type
+        
+        raise TypeError(f"Type [{item}] should be subclass of [BaseModel] or [Iterable[BaseModel]] type")
+
+    def _check_async_func(func) -> None:
+        if not inspect.iscoroutinefunction(func):
+            raise TypeError(
+                f"function [{func.__qualname__}] is not asynchronous"
+            )
+
+    def _get_state_middleware_for_handler(state):
+        return self._middleware_for_handler[state]
+        
+    def _get_state_handlers(state):
+        return self._handlers[state]
+
+    def _get_state_middlewares(state):
+        return self._middlewares[state]
+
+    def _get_handler_coro_info(coro):
+        coro_info = {
+            coro = coro,
+            arguments = defaultdict(str)
+        }
+
+        params = signature(coro).parameters
+        for (index, (key, value)) in enumerate(params.items()) :
+                if index != 0:
+                    if key in self._allowed_handler_args:
+                        arguments[key] = True
+                    else:
+                        raise MiddlewareSignatureError(
+                            f"function [{coro.__qualname__}] can't contain parameter [{key}]"
+                        )
+        return coro_info
+
+    def _get_middleware_coro_info(coro):
+        coro_info = {
+            coro = coro
+        }
+
+        params = signature(coro).parameters
+        params_length = len(params)
+
+        if params_length > 1:
+            raise MiddlewareSignatureError(
+                f"function [{coro.__qualname__}] can't contain multiple parameters"
+            )
+        elif params_length < 1:
+            raise MiddlewareSignatureError(
+                f"function [{coro.__qualname__}] should contain one required parameter"
+            )
+
+        return coro_info
+
+    def _run_middleware(state, payload):
+        state_middlewares = self._get_state_middlewares(state)
+        for (message, middleware) in state_middlewares.items():
+            try:
+                model = message.parse_obj(payload)
+                return await middleware(model)
+            except pydantic.ValidationError as err:
+                continue
 
     def handler(self, msg_type: pydantic.BaseModel, state=None):
         def internal_function(func):
-            async def wrapped(message):
-                return await func(message, self.context.set)
+            self._check_async_func(func)
+            
 
-            if state is None:
-                if msg_type in self._none_handlers:
-                    raise MultipleHandlerError(
+            coro_info = self._get_handler_coro_info(func)
+            state_handlers = self._get_state_handlers(state)
+            if msg_type in state_handlers:
+                raise MultipleHandlerError(
                         f"Register multiple handlers for the same msg_type [{msg_type}] is prohibited"
                     )
 
-                else:
-                    self._none_handlers[msg_type] = wrapped
-            else:
-                if (state in self._handlers) and (msg_type in self._handlers[state]):
-                    raise MultipleHandlerError(
-                        f"Register multiple handlers for the same state [{state}]\
-                             and msg_type [{msg_type}] is prohibited"
-                    )
-                else:
-                    self._handlers[state] = [(msg_type, wrapped)]
+            state_handlers[msg_type] = coro_info
 
-            return wrapped
+            # partial_func = None
+            # if arguments["middleware"] and arguments["set_context"]:
+            #     partial_func = partial(
+            #         func, 
+            #         middleware=argument["middle"],
+            #         set_context=argument["set_context"]
+            #     )
+            # elif arguments["middleware"] and not arguments["set_context"]:
+            #     partial_func = partial(
+            #         func, 
+            #         middleware=argument["middle"]
+            #     )
+            # elif not arguments["middleware"] and arguments["set_context"]
+            #     partial_func = partial(
+            #         func, 
+            #         set_context=argument["set_context"]
+            #     )
+            # else:
+            #     partial_func = func 
+
+
+                # if value.kind == value.KEYWORD_ONLY:
+                #     raise MiddlewareSignatureError(
+                #         f"function [{func.__qualname__}] can't contain keyword-only parameters"
+                #     )
+
+                # if value.kind == value.VAR_KEYWORD:
+                #     raise MiddlewareSignatureError(
+                #         f"function [{func.__qualname__}] can't contain **{key} parameter"
+                #     )
+
+                # if value.kind == value.VAR_POSITIONAL:
+                #     raise MiddlewareSignatureError(
+                #         f"function [{func.__qualname__}] can't contain *{key} parameter"
+                #     )
+                 
+                # if not index and :
+                #     raise MiddlewareSignatureError(
+                #         f"function [{func.__qualname__}] can't contain *{key} parameter"
+                #     )
+
+            return self._raise_exception
         return internal_function
 
     def middleware(self, type: Union[BaseModel, Iterable[BaseModel]], *, state=None):
-        message_types = None
-        if issubclass(type, pydantic.BaseModel):
-            message_types = [type]
-        elif issubclass(type, Iterable):
-            for item in type:
-                if not issubclass(item, pydantic.BaseModel):
-                    raise TypeError(f"Type [{item}] should be subclass of [BaseModel] type")
-            message_types = type
-        else:
-            raise TypeError(f"Type [{item}] should be subclass of [BaseModel] or [Iterable[BaseModel]] type")
+        types = self._check_types(type)
 
         def internal_function(func):
-            async def wrapped(message):
-                return await func(message)
+            self._check_async_func(func)
 
-            if not inspect.iscoroutinefunction(func):
-                raise TypeError(
-                    f"function [{func.__qualname__}] is not asynchronous"
-                )
-            # FIXME Continue implementation
-            # with ability to pass middleware as parameter to handler
-
-            if state is None:
-                for msg_type in message_types:
-                    if msg_type in self._none_middlewares:
-                        raise MultipleMiddlewareError(
+            coro_info = self._get_middleware_coro_info(func)
+            state_middlewares = self._get_state_middlewares(state)
+            for msg_type in types:
+                if msg_type in state_middlewares:
+                    raise MultipleHandlerError(
                             f"Register multiple middlewares for the same msg_type [{msg_type}] is prohibited"
                         )
-                    else:
-                        self._none_middlewares[msg_type] = wrapped
-            else:
-                state_middleware = self._middlewares.get(state)
-                if state_middleware is None:
-                    state_middleware = []
-                    for msg_type in message_types:
-                        state_middleware.append((msg_type, wrapped))
-                    self._middlewares[state] = state_middleware
-                else:
-                    for msg_type in message_types:
-                        for (exist_msg_type, func) in state_middleware:
-                            if msg_type == exist_msg_type:
-                                raise MultipleMiddlewareError(
-                                    f"Register multiple middlewares for the same msg_type [{msg_type}] is prohibited"
-                                )
-                        state_middleware.append((msg_type, wrapped))
 
-            return wrapped
+                state_middlewares[msg_type] = coro_info
+            return self._raise_exception
         return internal_function
 
     async def webhook(self, request):
+        # Build hierarchy only once
+        if not self._middleware_for_handler:
+            self._build_subclass_hierarchy()
+
         print("GITHUB INCOMING WEBHOOK JSON:")
         print(json.dumps(request.json, indent=2, sort_keys=True))
+
         payload = request.json
-
-        model = None
-        func = None
         state = await self.context.get()
-        if state is None:
-            for (msg_type, middleware) in self._none_middlewares.items():
-                try:
-                    model = msg_type.parse_obj(payload)
-                    await middleware(model)
-                    break
-                except pydantic.ValidationError as err:
-                    continue
+        state_middlewares = self._get_state_middlewares(state)
+        state_handlers = self._get_state_handlers(state)
+        state_middleware_for_handler = self._get_state_middleware_for_handler(state)
 
-
-            # iterate over all types
-            for (msg_type, closure) in self._none_handlers.items():
-                try:
-                    model = msg_type.parse_obj(payload)
-                    func = closure
-                    break
-                except pydantic.ValidationError as err:
-                    continue
-            else:
-                raise NoHandlerError("No handlers found for payload", payload)
-        else:
-            middlewares = self._middlewares.get(state)
-            if middlewares:
-                for (msg_type, middleware) in middlewares:
-                    try:
-                        model = msg_type.parse_obj(payload)
-                        await middleware(model)
-                        break
-                    except pydantic.ValidationError:
-                        continue            
-
-            handlers = self._handlers.get(state)
-            if handlers:
-                for (msg_type, closure) in handlers:
-                    try:
-                        model = msg_type.parse_obj(payload)
-                        func = closure
-                        break
-                    except pydantic.ValidationError:
-                        continue
+        for (message, handler_info) in state_handlers.items():
+            try:
+                model = message.parse_obj(payload)
+                middleware = state_middleware_for_handler[handler_info.coro]
+                if middleware:
+                    pass_middleware = handler_info["arguments"]["middleware"]
+                    pass_set_context = handler_info["arguments"]["set_context"]
+                    if pass_middleware:
+                        if pass_set_context:
+                            return await handler_info.coro(
+                                model,
+                                middleware=middleware,
+                                set_context=self.context.set
+                            )
+                        else:
+                            return await handler_info.coro(
+                                model,
+                                middleware=middleware
+                            )
+                    else:
+                        await middleware()
+                        if pass_set_context:
+                            return await handler_info.coro(
+                                model,
+                                set_context=self.context.set
+                            )
+                        else:
+                            return await handler_info.coro(
+                                model
+                            )
                 else:
-                    raise NoHandlerError(
-                        "No handlers found for payload", payload)
-            else:
-                raise NoHandlerError("No handlers found for payload", payload)
+                    if pass_set_context: 
+                        return await handler_info.coro(
+                            model,
+                            set_context=self.context.set
+                        )
+                    else:
+                        return await handler_info.coro(model)
+            except pydantic.ValidationError as err:
+                continue
 
-        return await func(model)
+        raise NoHandlerError("No handlers found for payload", payload)
 
     async def send_message(self, obj_type=telegram.SendMessage, **kwargs):
 
