@@ -6,6 +6,7 @@ from inspect import signature
 import json
 
 import aiohttp
+from motor.motor_asyncio import AsyncIOMotorClient
 import pydantic
 from pydantic import BaseModel
 
@@ -18,11 +19,19 @@ BASE_URL = "https://api.github.com"
 
 
 class GitHub:
-    def __init__(self, token: str, context: Context = NoneContext, http_client: aiohttp.ClientSession = None, base_url: str = BASE_URL):
+    def __init__(
+        self,
+        token: str,
+        context: Context = NoneContext,
+        http_client: aiohttp.ClientSession = None,
+        mongodb_client: AsyncIOMotorClient = None,
+        base_url: str = BASE_URL):
+
         self._allowed_handler_args = ["middleware", "set_context"]
         self._token = token
         self._base_url = f"{base_url}{token}/"
         self.http_client = http_client
+        self.mongodb_client = mongodb_client
         self.context = context
         self._handlers = defaultdict(dict)
         self._middlewares = defaultdict(dict)
@@ -235,7 +244,7 @@ class GitHub:
                                 middleware=middleware(model)
                             )
                     else:
-                        await middleware()
+                        await middleware(model)
                         if pass_set_context:
                             return await handler_coro(
                                 model,

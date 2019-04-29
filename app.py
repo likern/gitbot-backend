@@ -131,7 +131,8 @@ async def init(app, loop):
     telegram = bot
 
     db.github = SimpleNamespace(
-        issues=database.github['issues']
+        issues=database.github['issues'],
+        events=database.github['events']
     )
 
     api = SimpleNamespace(
@@ -145,9 +146,9 @@ async def init(app, loop):
     webhooks.github.prepare()
 
     # Schedule Stale Bot to run
-    # app.stale_bot = StaleBot(db.telegram.issues)
-    # asyncio.create_task(app.stale_bot.mark_stale_issues())
-    # asyncio.create_task(app.stale_bot.close_stale_issues())
+    app.stale_bot = StaleBot(db.telegram.issues)
+    asyncio.create_task(app.stale_bot.mark_stale_issues())
+    asyncio.create_task(app.stale_bot.close_stale_issues())
 
 
 @app.listener('after_server_stop')

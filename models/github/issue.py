@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, List
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -120,6 +120,32 @@ class IssueRepository(BaseModel):
     watchers: int
     default_branch: str
 
+class IssuePayload(BaseModel):
+    id: int
+    title: str
+    body: str
+    state: str
+    locked: bool
+    labels: List[str]
+    milestone: Optional[Any]
+    created_at: str
+    updated_at: str
+    closed_at: Optional[str]
+    comments: int
+    assignee: Optional[Any]
+    assignees: Optional[List[str]]
+    number: int
+    user: IssueUser
+    author_association: str
+    url: str
+    comments_url: str
+    events_url: str
+    html_url: str
+    labels_url: str
+    repository_url: str
+    node_id: str
+    
+
 class IssueInstallation(BaseModel):
     id: int
     node_id: str
@@ -146,7 +172,7 @@ class IssueChanges(BaseModel):
 
 class IssueEvent(BaseModel):
     action: IssueAction
-    issue: Any
+    issue: IssuePayload
     assignee: Optional[Any]
     label: Optional[Any]
     repository: IssueRepository

@@ -12,15 +12,14 @@ from models.github.issue import IssueEvent, IssueOpened, IssueClosed, IssueEdite
 
 webhook = GitHub(None, context=NoneContext())
 
-
 @webhook.middleware(IssueEvent)
 async def issue_event(issue: IssueEvent):
-    result = await webhook.db.github.issues.insert_one(issue.dict(skip_defaults=True))
+    result = await webhook.db.github.events.insert_one(issue.dict(skip_defaults=True))
     if not result.acknowledged:
         # FIXME: Handle error
         pass
 
-    print(f"[GITHUB] NEW ISSUE EVENT WAS SAVED WITH ID: [{result.inserted_id}]")
+    print(f"[GITHUB] EVENT ISSUE WAS LOGGED WITH ID: [{result.inserted_id}]")
 
 
 @webhook.handler(InstallationCreated)
@@ -32,17 +31,33 @@ async def installation_created(event: InstallationCreated):
 
 
 @webhook.handler(IssueOpened)
-async def issue_opened(event: IssueOpened, middleware):
+async def issue_opened(event: IssueOpened):
     print("[GIHUB] [WEBHOOK] [ISSUE OPENED]")
     print(event.to_string(pretty=True))
 
-    # issue = mongo.MongoIssue.new_from(issue_id=event.issue['id'])
+    result = await webhook.db.github.issues.insert_one(
+        event.dict(skip_defaults=True)
+    )
+    if not result.acknowledged:
+        # FIXME: Handle error
+        pass
 
-    # result = await db.telegram.issues.update_one(
-    #     {"issue_id": issue.issue_id},
-    #     {"$set": issue.dict(skip_defaults=True)},
-    #     upsert=True
-    # )
+    issue = mongo.MongoIssue.new_from(
+        issue_id=event.issue.id,
+        repo_id=event.repository.id,
+        owner_id=event.repository.owner.id,
+        installation_id=event.installation.id
+    )
+
+    result = await webhook.db.telegram.issues.insert_one(
+        issue.dict(skip_defaults=True)
+    )
+    if not result.acknowledged:
+        # FIXME: Handle error
+        pass
+    
+
+    print(f"[GITHUB] ISSUE WAS OPENED WITH ID: [{result.inserted_id}]")
     return response.json({}, status=200)
 
 
