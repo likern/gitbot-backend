@@ -142,6 +142,7 @@ async def init(app, loop):
     # because they require http_client
     webhooks.github.http_client = app.clients.github
     webhooks.github.db = db
+    webhooks.github.prepare()
 
     # Schedule Stale Bot to run
     # app.stale_bot = StaleBot(db.telegram.issues)

@@ -1,3 +1,4 @@
+from sanic import response
 from pydantic import BaseModel
 from githook import GitHub, NoneContext
 from models import mongo
@@ -23,7 +24,7 @@ async def issue_event(issue: IssueEvent):
 
 
 @webhook.handler(InstallationCreated)
-async def installation_created(event: InstallationCreated, *args):
+async def installation_created(event: InstallationCreated):
     print("[GIHUB] [WEBHOOK] [INSTALLATION CREATED]")
     print(event.to_string(pretty=True))
 
@@ -31,7 +32,7 @@ async def installation_created(event: InstallationCreated, *args):
 
 
 @webhook.handler(IssueOpened)
-async def installation_created(event: IssueOpened, middleware):
+async def issue_opened(event: IssueOpened, middleware):
     print("[GIHUB] [WEBHOOK] [ISSUE OPENED]")
     print(event.to_string(pretty=True))
 
@@ -46,12 +47,12 @@ async def installation_created(event: IssueOpened, middleware):
 
 
 @webhook.handler(IssueClosed)
-async def installation_created(event: IssueClosed, set_context):
+async def issue_closed(event: IssueClosed, set_context):
     print("[GIHUB] [WEBHOOK] [ISSUE CLOSED]")
     print(event.to_string(pretty=True))
 
 @webhook.handler(IssueEdited)
-async def installation_created(event: IssueEdited, set_context):
+async def issue_edited(event: IssueEdited, set_context):
     print("[GIHUB] [WEBHOOK] [ISSUE EDITED]")
     print(event.to_string(pretty=True))
 

@@ -32,23 +32,28 @@ class GitHub:
     async def _raise_exception(func):
                 raise ValueError(f"Function [{func.__qualname__}] shouldn't be called directly")
 
-    def _build_subclass_hierarchy():
+    def prepare(self):
+        if not self._middleware_for_handler:
+            self._build_subclass_hierarchy()
+
+    def _build_subclass_hierarchy(self):
         for (state, state_handlers_info) in self._handlers.items():
                 state_middlewares_info = self._middlewares[state]
                 for (message_handler, handler_info) in state_handlers_info.items():
                     for (message_middleware, middleware_info) in state_middlewares_info.items():
                         if issubclass(message_handler, message_middleware):
-                            if self._middleware_for_handler[state].get(handler_info.coro):
+                            coro = handler_info["coro"]
+                            if self._middleware_for_handler[state].get(coro):
                                 raise MultipleMiddlewareError(
-                                    f"Found multiple middlewares for handler [{handler_info.coro.__qualname__}]"
+                                    f"Found multiple middlewares for handler [{coro.__qualname__}]"
                                 )
-                            self._middleware_for_handler[state][handler_info.coro] = middleware_info.coro
+                            self._middleware_for_handler[state][coro] = middleware_info["coro"]
             
 
-    def _check_types(message_type) -> Iterable[BaseModel]:
-        if issubclass(type, pydantic.BaseModel):
+    def _check_types(self, message_type) -> Iterable[BaseModel]:
+        if issubclass(message_type, pydantic.BaseModel):
             return [message_type]
-        elif issubclass(type, Iterable):
+        elif issubclass(message_type, Iterable):
             for item in message_type:
                 if not issubclass(item, pydantic.BaseModel):
                     raise TypeError(f"Type [{item}] should be subclass of [BaseModel] type")
@@ -56,41 +61,44 @@ class GitHub:
         
         raise TypeError(f"Type [{item}] should be subclass of [BaseModel] or [Iterable[BaseModel]] type")
 
-    def _check_async_func(func) -> None:
+    def _check_async_func(self, func) -> None:
         if not inspect.iscoroutinefunction(func):
             raise TypeError(
                 f"function [{func.__qualname__}] is not asynchronous"
             )
 
-    def _get_state_middleware_for_handler(state):
+    def _get_state_middleware_for_handler(self, state):
         return self._middleware_for_handler[state]
         
-    def _get_state_handlers(state):
+    def _get_state_handlers(self, state):
         return self._handlers[state]
 
-    def _get_state_middlewares(state):
+    def _get_state_middlewares(self, state):
         return self._middlewares[state]
 
-    def _get_handler_coro_info(coro):
+    def _get_handler_coro_info(self, coro):
         coro_info = {
-            coro = coro,
-            arguments = defaultdict(str)
+            "coro": coro,
+            "arguments": {
+                "middleware": False,
+                "set_context": False
+            }
         }
 
         params = signature(coro).parameters
         for (index, (key, value)) in enumerate(params.items()) :
                 if index != 0:
                     if key in self._allowed_handler_args:
-                        arguments[key] = True
+                        coro_info["arguments"][key] = True
                     else:
                         raise MiddlewareSignatureError(
                             f"function [{coro.__qualname__}] can't contain parameter [{key}]"
                         )
         return coro_info
 
-    def _get_middleware_coro_info(coro):
+    def _get_middleware_coro_info(self, coro):
         coro_info = {
-            coro = coro
+            "coro": coro
         }
 
         params = signature(coro).parameters
@@ -107,14 +115,14 @@ class GitHub:
 
         return coro_info
 
-    def _run_middleware(state, payload):
-        state_middlewares = self._get_state_middlewares(state)
-        for (message, middleware) in state_middlewares.items():
-            try:
-                model = message.parse_obj(payload)
-                return await middleware(model)
-            except pydantic.ValidationError as err:
-                continue
+    # def _run_middleware(state, payload):
+    #     state_middlewares = self._get_state_middlewares(state)
+    #     for (message, middleware) in state_middlewares.items():
+    #         try:
+    #             model = message.parse_obj(payload)
+    #             return await middleware(model)
+    #         except pydantic.ValidationError as err:
+    #             continue
 
     def handler(self, msg_type: pydantic.BaseModel, state=None):
         def internal_function(func):
@@ -209,36 +217,37 @@ class GitHub:
         for (message, handler_info) in state_handlers.items():
             try:
                 model = message.parse_obj(payload)
-                middleware = state_middleware_for_handler[handler_info.coro]
+                handler_coro = handler_info["coro"]
+                middleware = state_middleware_for_handler[handler_coro]
                 if middleware:
                     pass_middleware = handler_info["arguments"]["middleware"]
                     pass_set_context = handler_info["arguments"]["set_context"]
                     if pass_middleware:
                         if pass_set_context:
-                            return await handler_info.coro(
+                            return await handler_coro(
                                 model,
-                                middleware=middleware,
+                                middleware=middleware(model),
                                 set_context=self.context.set
                             )
                         else:
-                            return await handler_info.coro(
+                            return await handler_coro(
                                 model,
-                                middleware=middleware
+                                middleware=middleware(model)
                             )
                     else:
                         await middleware()
                         if pass_set_context:
-                            return await handler_info.coro(
+                            return await handler_coro(
                                 model,
                                 set_context=self.context.set
                             )
                         else:
-                            return await handler_info.coro(
+                            return await handler_coro(
                                 model
                             )
                 else:
                     if pass_set_context: 
-                        return await handler_info.coro(
+                        return await handler_coro(
                             model,
                             set_context=self.context.set
                         )
