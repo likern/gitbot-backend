@@ -18,14 +18,14 @@ class MongoIssueAction(BaseModel):
 
 
 class MongoIssue(BaseModel):
-    issue_id: int
-    repo_id: int
-    owner_id: int
+    issue: int
+    repo: str
+    owner: str
     installation_id: int
     action: MongoIssueAction
 
     @staticmethod
-    def new_from(issue_id: int, repo_id: int, owner_id: int, installation_id: int):
+    def new_from(issue: int, repo: str, owner: str, installation_id: int):
         utcnow = datetime.utcnow()
         print(f"Current datetime: [{utcnow}]")
         stale_date = utcnow + timedelta(minutes=1)
@@ -37,9 +37,9 @@ class MongoIssue(BaseModel):
         )
 
         return MongoIssue(
-            issue_id=issue_id,
-            repo_id=repo_id,
-            owner_id=owner_id,
+            issue=issue,
+            repo=repo,
+            owner=owner,
             installation_id=installation_id,
             action=action
         )
