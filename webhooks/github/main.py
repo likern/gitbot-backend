@@ -9,6 +9,7 @@ from models.github.installation import (
 )
 
 from models.github.issue import IssueEvent, IssueOpened, IssueClosed, IssueEdited
+from models.mongo.user import MongoUserAuthStatus
 
 webhook = GitHub(None, context=NoneContext())
 
@@ -24,8 +25,25 @@ async def issue_event(issue: IssueEvent):
 
 @webhook.handler(InstallationCreated)
 async def installation_created(event: InstallationCreated):
-    print("[GIHUB] [WEBHOOK] [INSTALLATION CREATED]")
+    print("[GITHUB] [WEBHOOK] [INSTALLATION CREATED]")
     print(event.to_string(pretty=True))
+
+    # Identify installation id with user token
+    account_id = event.installation.account.id
+    installation_id = event.installation.id
+
+    user = await webhook.db.telegram.users.find_one(
+        filter={
+            "auth.status": MongoUserAuthStatus.success,
+            "auth.github.user_id": account_id
+        },
+        projection=["auth.token"]
+    )
+    print(user)
+
+    result = await webhook.db.telegram.installations.insert_one({
+        "_id": installation_id, "token": user["auth"]["token"]
+    })
 
     return response.json({}, status=200)
 
@@ -43,9 +61,9 @@ async def issue_opened(event: IssueOpened):
         pass
 
     issue = mongo.MongoIssue.new_from(
-        issue_id=event.issue.id,
-        repo_id=event.repository.id,
-        owner_id=event.repository.owner.id,
+        issue=event.issue.number,
+        repo=event.repository.name,
+        owner=event.repository.owner.login,
         installation_id=event.installation.id
     )
 
