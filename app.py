@@ -37,7 +37,7 @@ import webhooks
 # 		return super().default(request, exception)
 
 
-app = Sanic(__name__)
+app = Sanic(__name__, load_env='HELVYBOT_')
 # app.error_handler = CustomErrorHandler()
 app.config.from_envvar('HELVYBOT_CONFIG')
 
@@ -122,7 +122,8 @@ async def init(app, loop):
         logs=database.telegram['logs'],
         contexts=database.telegram['contexts'],
         dialogs=database.telegram['dialogs'],
-        issues=database.telegram['issues']
+        issues=database.telegram['issues'],
+        installations=database.telegram['installations']
     )
 
     lang = Intl(db.telegram.dialogs, db.telegram.users)
@@ -146,7 +147,7 @@ async def init(app, loop):
     webhooks.github.prepare()
 
     # Schedule Stale Bot to run
-    app.stale_bot = StaleBot(db.telegram.issues)
+    app.stale_bot = StaleBot(db.telegram)
     asyncio.create_task(app.stale_bot.mark_stale_issues())
     asyncio.create_task(app.stale_bot.close_stale_issues())
 
@@ -379,7 +380,7 @@ async def github_auth_webhook(request):
                                 chat_id=chat_id,
                                 text=emojize(
                                     f"*On GitHub* I will act with *rights of user* "
-                                    f"[ name: [{github_user.name}], login: [{github_user.login}] ]",
+                                    f"[name: {github_user.name}, login: {github_user.login}]",
                                     use_aliases=True),
                                 parse_mode=telegram.ParseMode.markdown
                             )
@@ -414,12 +415,14 @@ async def github_auth_webhook(request):
                             #     parse_mode=telegram.ParseMode.markdown
                             # )
         else:
-            await api.telegram.send_message(
-                chat_id=chat_id,
-                text=emojize("Authorization failed :confused:",
-                             use_aliases=True),
-                parse_mode=telegram.ParseMode.markdown
-            )
+            # FIXME Add error handler
+            raise ValueError(f"Can't find document for user with auth.state [{state}]")
+            # await api.telegram.send_message(
+            #     chat_id=chat_id,
+            #     text=emojize("Authorization failed :confused:",
+            #                  use_aliases=True),
+            #     parse_mode=telegram.ParseMode.markdown
+            # )
 
     redirect_url = 'https://telegram.me/helvybot'
     return response.json(
