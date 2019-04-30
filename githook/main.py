@@ -224,13 +224,19 @@ class GitHub:
         state_middleware_for_handler = self._get_state_middleware_for_handler(state)
 
         for (message, handler_info) in state_handlers.items():
+            model = None
             try:
                 model = message.parse_obj(payload)
+            except pydantic.ValidationError as err:
+                continue
+
+            if model:
                 handler_coro = handler_info["coro"]
-                middleware = state_middleware_for_handler[handler_coro]
+                middleware = state_middleware_for_handler.get(handler_coro)
+
+                pass_middleware = handler_info["arguments"]["middleware"]
+                pass_set_context = handler_info["arguments"]["set_context"]
                 if middleware:
-                    pass_middleware = handler_info["arguments"]["middleware"]
-                    pass_set_context = handler_info["arguments"]["set_context"]
                     if pass_middleware:
                         if pass_set_context:
                             return await handler_coro(
@@ -261,11 +267,9 @@ class GitHub:
                             set_context=self.context.set
                         )
                     else:
-                        return await handler_info.coro(model)
-            except pydantic.ValidationError as err:
-                continue
-
-        raise NoHandlerError("No handlers found for payload", payload)
+                        return await handler_coro(model)
+            else:
+                raise NoHandlerError("No handlers found for payload", payload)
 
     async def send_message(self, obj_type=telegram.SendMessage, **kwargs):
 
