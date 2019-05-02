@@ -1,14 +1,16 @@
+from pprint import pprint
 import asyncio
-from datetime import datetime
-from itertools import groupby
-from models.mongo.issues import MongoIssueActionStatus
+from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
+from toolz import itertoolz
+from models.mongo.issues import MongoIssueActionStatus, MongoIssueAction, MongoIssue, MongoIssueClosed
 from models.mongo.user import MongoUserAuthStatus
+from api import GitHubAPI
+from typing import List
 
 
 class StaleBot:
-    urls = {
-        "set_label": "/repos/{owner}/{repo}/issues/{issue}/labels"
-    }
+
 
     def __init__(self, collections, http_client):
         self._colls = collections
@@ -29,19 +31,41 @@ class StaleBot:
                 raise ValueError(f"Can't find token for user_id [{user_id}]")
         return user_to_token
 
-    async def set_label(self, *, label, owner, repo, issue):
-        endpoint = urls["set_label"].format(owner=owner, repo=repo, issue=issue)
-        payload = { "labels": [f"{label}"] }
+    async def run(self):
+        await self._schedule(self._mark_stale_issues, time=10)
+        await self._schedule(self._close_stale_issues, time=10)
 
-        async with self._http_client.post(endpoint, json=payload) as resp:
-            print(resp.status)
-            print(resp.json())
+    async def _schedule(self, func, *, time = 60):
+        try:
+            await func()
+        except BaseException as err:
+            print(err)
+        finally:
+            await asyncio.sleep(time)
+            asyncio.create_task(self._schedule(func, time=time))
 
-    async def schedule_issue_become_stale(self):
-        pass
+    async def _get_old_issues_with_status(self, status: MongoIssueActionStatus) -> List:
+        utcnow = datetime.utcnow()
+        cursor = self._colls.issues.find(
+            {
+                "action.status": status,
+                "action.date": {"$lte": utcnow}
+            }
+        )
 
-    async def mark_stale_issues(self):
-        print("[STALEBOT] MARK STALE ISSUES")
+        return await cursor.to_list(None)
+
+    async def _map_installation_with_token(self, issues):
+        ids = list({issue["installation_id"] for issue in issues})
+        cursor = self._colls.installations.find(
+            filter={"_id": {"$in": ids}}
+        )
+
+        mapping = {x["_id"] : x["token"] for x in await cursor.to_list(None)}
+        return mapping
+
+    async def _mark_stale_issues(self):
+        print("[ENTER] _mark_stale_issues")
         utcnow = datetime.utcnow()
         cursor = self._colls.issues.find(
             {
@@ -49,38 +73,86 @@ class StaleBot:
                 "action.date": {"$lte": utcnow}
             }
         )
-        
+
         stale_issues = await cursor.to_list(None)
-        install_ids = [stale_issue["installation_id"] for stale_issue in stale_issues]
-        # groups = groupby(stale_issues, key=lambda issue: return issue["installation_id"])
+        # Break as soon as possible if no stale issues
+        if not stale_issues:
+            return None
+
+        install_ids = list({issue["installation_id"] for issue in stale_issues})
 
         cursor = self._colls.installations.find(
             filter={"_id": {"$in": install_ids}}
         )
 
-        installs = await cursor.to_list(None)
-        install_to_token = dict(installs)
+        mapping = { item["_id"] : item["token"] for item in await cursor.to_list(None)}
 
-        for install_id in install_ids:
-            # FIXME
-
-        for key, group in groupby(stale_issues, key=lambda x: return )
-        
-        print(stale_issues)
-        # [issue["issue_id"] for issue in stale_issue]
-        # for issue in  :
-        #     print(f"STALE ISSUE: [{issue}]")
-        await asyncio.sleep(10)
-        asyncio.create_task(self.mark_stale_issues())
-
-    async def close_stale_issues(self):
-        print("[STALEBOT] CLOSE STALE ISSUES")
-        utcnow = datetime.utcnow()
-        result = self._colls.issues.find(
-            {
-                "action.status": MongoIssueActionStatus.close_issue,
-                "action.date": {"$lte": utcnow}
+        for issue in stale_issues:
+            token = mapping[issue["installation_id"]]
+            kwargs = {
+                "owner": issue["owner"],
+                "repo": issue["repo"],
+                "issue": issue["issue"]
             }
-        )
-        await asyncio.sleep(10)
-        asyncio.create_task(self.close_stale_issues())
+
+            context = GitHubAPI(token).add_labels_to_issue(labels="stale", **kwargs)
+            async with context as resp:
+                if resp.status in [200, 201]:
+                    new_date = issue["action"]["date"] + timedelta(minutes=1)
+                    new_action = MongoIssueAction(
+                        status=MongoIssueActionStatus.close_issue,
+                        date=new_date
+                    ).dict(skip_defaults=True)
+                    issue_id = issue["_id"]
+
+                    result = await self._colls.issues.update_one(
+                        filter={"_id": issue_id},
+                        update={"$set": {"action": new_action}}
+                    )
+                    print(f"[...] _mark_stale_issues: updated issue [{issue_id}] with action: [{new_action}]")
+                    if result.acknowledged == True:
+                        pass
+                elif resp.status == 404:
+                    print(f"!!!!!!!! CHECK THAT PATH !!!!!!!!!!")
+                    new_action = dict(MongoIssueClosed())
+                    result = await self._colls.issues.update_one(
+                        filter={"_id": issue["_id"]},
+                        update={"$set": {"action": new_action}}
+                    )
+
+                    if result.acknowledged == True:
+                        print(f"Successfully closed issue: [{pprint(issue)}]")
+                    # Issue was deleted manually by someone
+        print("[EXIT] _mark_stale_issues")
+
+    async def _close_stale_issues(self):
+        print("[ENTER] _close_stale_issues")
+        issues = await self._get_old_issues_with_status(MongoIssueActionStatus.close_issue)
+        if not issues:
+            return None
+
+        tokens = await self._map_installation_with_token(issues)
+        for issue in issues:
+            token = tokens[issue["installation_id"]]
+            kwargs = {
+                "owner": issue["owner"],
+                "repo": issue["repo"],
+                "issue": issue["issue"]
+            }
+
+            gh = GitHubAPI(token)
+            async with gh.close_issue(**kwargs) as resp:
+                if resp.status in [200, 201]:
+                    async with gh.remove_label_from_issue(label="stale", **kwargs) as resp:
+                        if resp.status in [200, 404]:
+                            new_action = dict(MongoIssueClosed())
+                            issue_id = issue["_id"]
+                            result = await self._colls.issues.update_one(
+                                filter={"_id": issue_id},
+                                update={"$set": {"action": new_action}}
+                            )
+                            print(f"[...] _close_stale_issues: updated issue [{issue_id}] with action: [{new_action}]")
+
+                            if result.acknowledged == True:
+                                pass
+        print("[EXIT] _close_stale_issues")

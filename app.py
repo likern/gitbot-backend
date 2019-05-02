@@ -17,7 +17,7 @@ from bots import StaleBot
 
 from models import github, mongo, telegram
 from types import SimpleNamespace
-from api.telegram import Telegram
+from api.github import GitHubAPI
 import pprint
 import json
 import intl
@@ -140,6 +140,9 @@ async def init(app, loop):
         telegram=telegram
     )
 
+    # Pass aiohttp client session object to GitHubAPI
+    GitHubAPI.http_client = app.clients.github
+
     # Finish creating webhooks here
     # because they require http_client
     webhooks.github.http_client = app.clients.github
@@ -147,10 +150,8 @@ async def init(app, loop):
     webhooks.github.prepare()
 
     # Schedule Stale Bot to run
-    app.stale_bot = StaleBot(db.telegram)
-    asyncio.create_task(app.stale_bot.mark_stale_issues())
-    asyncio.create_task(app.stale_bot.close_stale_issues())
-
+    app.stale_bot = StaleBot(db.telegram, app.clients.github)
+    asyncio.create_task(app.stale_bot.run())
 
 @app.listener('after_server_stop')
 async def finish(app, loop):

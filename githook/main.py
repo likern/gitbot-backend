@@ -7,6 +7,7 @@ import json
 
 import aiohttp
 from motor.motor_asyncio import AsyncIOMotorClient
+from sanic import response
 import pydantic
 from pydantic import BaseModel
 
@@ -214,8 +215,8 @@ class GitHub:
         if not self._middleware_for_handler:
             self._build_subclass_hierarchy()
 
-        print("GITHUB INCOMING WEBHOOK JSON:")
-        print(json.dumps(request.json, indent=2, sort_keys=True))
+        # print("GITHUB INCOMING WEBHOOK JSON:")
+        # print(json.dumps(request.json, indent=2, sort_keys=True))
 
         payload = request.json
         state = await self.context.get()
@@ -270,6 +271,7 @@ class GitHub:
                         return await handler_coro(model)
             else:
                 raise NoHandlerError("No handlers found for payload", payload)
+        return response.json({}, status=200)
 
     async def send_message(self, obj_type=telegram.SendMessage, **kwargs):
 

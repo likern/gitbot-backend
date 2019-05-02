@@ -1,3 +1,4 @@
+from __future__ import annotations
 from enum import Enum
 from datetime import datetime, timedelta
 from typing import Any, Optional, Union, Mapping
@@ -5,8 +6,10 @@ from pydantic import BaseModel, validator
 
 
 class MongoIssueActionStatus(str, Enum):
-    mark_stale = 'mark_stale'
-    close_issue = 'close_issue'
+    open = "open"
+    mark_stale = "mark_stale"
+    close_issue = "close_issue"
+    closed = "closed"
 
     class Config:
         use_enum_values = True
@@ -14,8 +17,17 @@ class MongoIssueActionStatus(str, Enum):
 
 class MongoIssueAction(BaseModel):
     status: MongoIssueActionStatus
-    date: datetime
+    date: Optional[datetime]
 
+    class Config:
+        use_enum_values = True
+
+class MongoIssueClosed(MongoIssueAction):
+    status: MongoIssueActionStatus = MongoIssueActionStatus.closed
+    date: Optional[datetime] = None
+
+    class Config:
+        use_enum_values = True
 
 class MongoIssue(BaseModel):
     issue: int
@@ -43,3 +55,8 @@ class MongoIssue(BaseModel):
             installation_id=installation_id,
             action=action
         )
+
+    @staticmethod
+    def with_status_and_date(mongo_issue: MongoIssue, status: MongoIssueActionStatus, date: datetime):
+        action = MongoIssueAction(status=status, date=date)
+        return mongo_issue.copy(update={"action": action})

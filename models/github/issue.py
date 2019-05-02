@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Optional, Union, List
-from pydantic import BaseModel
+from pydantic import BaseModel, validate_model
 from datetime import datetime
 
 
@@ -181,6 +181,8 @@ class IssueEvent(BaseModel):
 
 class IssueOpened(IssueEvent):
     action: IssueAction = IssueAction.opened
+
+    @vali
 
 class IssueEdited(IssueEvent):
     action: IssueAction = IssueAction.edited
