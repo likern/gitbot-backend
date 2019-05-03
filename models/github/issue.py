@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Optional, Union, List
-from pydantic import BaseModel, validate_model
+from pydantic import BaseModel, validator
 from datetime import datetime
 
 
@@ -180,15 +180,27 @@ class IssueEvent(BaseModel):
     installation: IssueInstallation
 
 class IssueOpened(IssueEvent):
-    action: IssueAction = IssueAction.opened
-
-    @vali
+    @validator('action')
+    def check_type(cls, value):
+        if value != IssueAction.opened:
+            raise ValueError('Not IssueOpened')
+        return value
 
 class IssueEdited(IssueEvent):
-    action: IssueAction = IssueAction.edited
     changes: IssueChanges
 
+    @validator('action')
+    def check_type(cls, value):
+        if value != IssueAction.edited:
+            raise ValueError('Not IssueEdited')
+        return value
+
 class IssueClosed(IssueEvent):
-    action: IssueAction = IssueAction.closed
     changes: Any
+
+    @validator('action')
+    def check_type(cls, value):
+        if value != IssueAction.closed:
+            raise ValueError('Not IssueClosed')
+        return value
 

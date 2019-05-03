@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Any, Optional, Union, List
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from .account import Account
 from .repository import Repository
 from .sender import Sender
@@ -36,31 +36,46 @@ class InstallationEvent(BaseModel):
     sender: Sender
 
 
-class InstallationCreated(BaseModel):
-    action: InstallationAction = InstallationAction.created
+class InstallationCreated(InstallationEvent):
     installation: InstallationItem
     repositories: List[Repository]
     sender: Sender
+
+    @validator('action')
+    def check_type(cls, value):
+        if value != InstallationAction.created:
+            raise ValueError('Not InstallationCreated')
+        return value
 
     class Config:
         use_enum_values = True
 
 
-class InstallationDeleted(BaseModel):
-    action: InstallationAction = InstallationAction.deleted
+class InstallationDeleted(InstallationEvent):
     installation: InstallationItem
     repositories: List[Repository]
     sender: Sender
+
+    @validator('action')
+    def check_type(cls, value):
+        if value != InstallationAction.deleted:
+            raise ValueError('Not InstallationDeleted')
+        return value
 
     class Config:
         use_enum_values = True
 
 
-class InstallationNewPermissions(BaseModel):
-    action: InstallationAction = InstallationAction.new_permissions_accepted
+class InstallationNewPermissions(InstallationEvent):
     installation: InstallationItem
     repositories: List[Repository]
     sender: Sender
+
+    @validator('action')
+    def check_type(cls, value):
+        if value != InstallationAction.new_permissions_accepted:
+            raise ValueError('Not InstallationNewPermissions')
+        return value
 
     class Config:
         use_enum_values = True
