@@ -58,7 +58,13 @@ async def installation_created(event: InstallationCreated):
 
 @webhook.handler(IssueOpened)
 async def issue_opened(event: IssueOpened):
-    # print("[GIHUB] [WEBHOOK] [ISSUE OPENED]")
+    print(
+        "[GIHUB] [WEBHOOK] [ISSUE OPENED] "
+        f"Number: [{event.issue.number}], "
+        f"Repo: [{event.repository.name}], "
+        f"Owner: [{event.repository.owner.login}], "
+        f"Install Id: [{event.installation.id}]"
+    )
     # print(event.to_string(pretty=True))
 
     # result = await webhook.db.github.issues.insert_one(
