@@ -12,6 +12,7 @@ from enum import Enum, EnumMeta
 # import contextvars
 from contextvars import Context, copy_context
 from sanic.handlers import ErrorHandler
+from sanic_cors import CORS
 from bots import StaleBot
 
 
@@ -22,6 +23,10 @@ import pprint
 import json
 import intl
 from intl import Intl
+
+from firebase_admin import auth
+
+
 
 
 from bson.objectid import ObjectId
@@ -38,6 +43,8 @@ import webhooks
 
 
 app = Sanic(__name__, load_env='HELVYBOT_')
+CORS(app, automatic_options=True)
+
 # app.error_handler = CustomErrorHandler()
 app.config.from_envvar('HELVYBOT_CONFIG')
 
@@ -108,11 +115,13 @@ async def init(app, loop):
         github=helpers.get_aiohttp_client_for_github(
             jwt_token=app.config.GITHUB_GWT_TOKEN, loop=loop),
         telegram=aiohttp.ClientSession(loop=loop),
-        mongodb=motor_asyncio.AsyncIOMotorClient(app.config.MONGO_CONNECTION)
+        mongodb=motor_asyncio.AsyncIOMotorClient(app.config.MONGO_CONNECTION),
+        firebase=helpers.get_firebase_client(app.config.FIREBASE_TOKEN_PATH)
     )
 
     database = SimpleNamespace(
         telegram=app.clients.mongodb["helvybot"],
+        helvy=app.clients.mongodb["helvy"],
         github=app.clients.mongodb["github"]
     )
 
@@ -124,6 +133,10 @@ async def init(app, loop):
         dialogs=database.telegram['dialogs'],
         issues=database.telegram['issues'],
         installations=database.telegram['installations']
+    )
+
+    db.helvy = SimpleNamespace(
+        users=database.helvy['users']
     )
 
     lang = Intl(db.telegram.dialogs, db.telegram.users)
@@ -757,6 +770,30 @@ async def show_bot_description(update, set_context):
 async def github_webhook(request):
     return await webhooks.github.webhook(request)
     # return response.json({}, status=200)
+
+# This webhook processes incoming Telegram events
+@app.route("/signup", methods=['POST'])
+async def signup(request):
+    # token = helpers.extract_bearer_token(request.token)
+    token = request.token
+    decoded_token = auth.verify_id_token(token)
+    print(decoded_token)
+
+    uid = decoded_token['uid']
+    user = await db.helvy.users.find_one(
+        filter={
+            "_id": uid
+        }
+    )
+
+    decoded_token["_id"] = uid
+
+    if user is None:
+        result = await db.helvy.users.insert_one(decoded_token)
+        if result.acknowledged and result.inserted_id == uid:
+            return response.json({}, status=200)
+
+    return response.json({}, status=403)
 
 
 # This webhook processes incoming Telegram events

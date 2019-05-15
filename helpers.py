@@ -4,6 +4,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from aiohttp import ClientSession
 
+import firebase_admin
+from firebase_admin import credentials
+
 import jwt
 
 
@@ -36,3 +39,11 @@ def get_aiohttp_client_for_github(*, jwt_token, loop):
         'Authorization': f'Bearer {jwt_token}'
     }
     return ClientSession(loop=loop)
+
+def extract_bearer_token(token: str):
+    return token.strip().partition(" ")[2]
+
+
+def get_firebase_client(path):
+    cred = credentials.Certificate(path)
+    return firebase_admin.initialize_app(cred)
