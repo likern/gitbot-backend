@@ -47,3 +47,57 @@ def extract_bearer_token(token: str):
 def get_firebase_client(path):
     cred = credentials.Certificate(path)
     return firebase_admin.initialize_app(cred)
+
+# def get_default_bot(user_id: str):
+#     return {
+#         "_id": user_id,
+#         "name": "New bot",
+#         "repositories": [],
+#         "settings": {
+#             "staleissue": {
+#                 "enabled": False,
+#                 "stale_days": 60,
+#                 "close_days": 7,
+#                 "stale_labels": ["wontfix"],
+#                 "except_labels": ["security"],
+#                 "stale_comment": "This issue was marked as stale due to inactivity",
+#                 "close_comment": "This stale issue was closed due to inactivity"
+#             },
+#             "stalepullrequest": {
+#                 "enabled": False,
+#                 "stale_days": 60,
+#                 "close_days": 7,
+#                 "stale_labels": ["wontfix"],
+#                 "except_labels": ["security"],
+#                 "stale_comment": "This pull request was marked as stale due to inactivity",
+#                 "close_comment": "This stale pull request was closed due to inactivity"
+#             }
+#         }
+#     }
+
+def get_default_bot():
+    return {
+        "name": "New bot",
+        "repositories": [],
+        "settings": {
+            "staleissue": {
+                "enabled": False,
+                "stale_days": 60,
+                "close_days": 7,
+                "stale_labels": ["wontfix"],
+                "except_labels": ["security"],
+                "stale_comment": "This issue was marked as stale due to inactivity",
+                "close_comment": "This stale issue was closed due to inactivity"
+            },
+            "stalepullrequest": {
+                "enabled": False,
+                "stale_days": 60,
+                "close_days": 7,
+                "stale_labels": ["wontfix"],
+                "except_labels": ["security"],
+                "stale_comment": "This pull request was marked as stale due to inactivity",
+                "close_comment": "This stale pull request was closed due to inactivity"
+            }
+        }
+    }
+    

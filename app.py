@@ -34,6 +34,7 @@ from bson.objectid import ObjectId
 import pytebot
 import githook
 import webhooks
+import gitbot
 
 # class TelegramErrorHandler(ErrorHandler):
 # 	def default(self, request, exception):
@@ -42,11 +43,12 @@ import webhooks
 # 		return super().default(request, exception)
 
 
-app = Sanic(__name__, load_env='HELVYBOT_')
+app = Sanic(__name__, load_env='GITBOT_')
 CORS(app, automatic_options=True)
+app.config.from_envvar('GITBOT_CONFIG')
 
-# app.error_handler = CustomErrorHandler()
-app.config.from_envvar('HELVYBOT_CONFIG')
+# Add GitBot API
+app.blueprint(gitbot.v1.blueprint)
 
 api = None
 db = SimpleNamespace(
@@ -121,7 +123,8 @@ async def init(app, loop):
 
     database = SimpleNamespace(
         telegram=app.clients.mongodb["helvybot"],
-        helvy=app.clients.mongodb["helvy"],
+        # helvy=app.clients.mongodb["helvy"],
+        gitbot=app.clients.mongodb["gitbot"],
         github=app.clients.mongodb["github"]
     )
 
@@ -135,8 +138,14 @@ async def init(app, loop):
         installations=database.telegram['installations']
     )
 
-    db.helvy = SimpleNamespace(
-        users=database.helvy['users']
+    # db.helvy = SimpleNamespace(
+    #     users=database.helvy['users'],
+    #     bots=database.helvy['bots']
+    # )
+
+    db.gitbot = SimpleNamespace(
+        users=database.gitbot['users'],
+        bots=database.gitbot['bots']
     )
 
     lang = Intl(db.telegram.dialogs, db.telegram.users)
@@ -152,6 +161,9 @@ async def init(app, loop):
     api = SimpleNamespace(
         telegram=telegram
     )
+
+    # Initialize database for GitBot API /v1/
+    gitbot.v1.database = db.gitbot
 
     # Pass aiohttp client session object to GitHubAPI
     GitHubAPI.http_client = app.clients.github
@@ -771,29 +783,42 @@ async def github_webhook(request):
     return await webhooks.github.webhook(request)
     # return response.json({}, status=200)
 
-# This webhook processes incoming Telegram events
+
 @app.route("/signup", methods=['POST'])
 async def signup(request):
-    # token = helpers.extract_bearer_token(request.token)
     token = request.token
     decoded_token = auth.verify_id_token(token)
     print(decoded_token)
 
     uid = decoded_token['uid']
-    user = await db.helvy.users.find_one(
+    user = await db.gitbot.users.find_one(
         filter={
             "_id": uid
         }
     )
 
-    decoded_token["_id"] = uid
+    res = await db.gitbot.users.insert_one(user)
+    if not res.acknowledged or res.inserted_id != uid:
+        raise ServerError("Failed to save user settings into database")
+    return response.json({}, status=200)
 
-    if user is None:
-        result = await db.helvy.users.insert_one(decoded_token)
-        if result.acknowledged and result.inserted_id == uid:
-            return response.json({}, status=200)
+    # if user is None:
+    #     user = {"_id": uid}
+    #     bot = helpers.get_default_bot(user_id=uid)
 
-    return response.json({}, status=403)
+    #     async with await app.clients.mongodb.start_session() as s:
+    #         async with s.start_transaction():
+    #             res1 = await db.helvy.bots.insert_one(bot, session=s)
+    #             res2 = await db.helvy.users.insert_one(user, session=s)
+
+    #             res1_fail = not res1.acknowledged or res1.inserted_id != uid
+    #             res2_fail = not res2.acknowledged or res2.inserted_id != uid
+    #             if res1_fail or res2_fail:
+    #                 s.abort_transaction()
+    #     return response.json({}, status=200)
+    # return response.json({}, status=403)
+
+
 
 
 # This webhook processes incoming Telegram events
