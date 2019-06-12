@@ -75,10 +75,11 @@ def get_firebase_client(path):
 #         }
 #     }
 
-def get_default_bot():
+def get_bot_settings(user_id, name, repos):
     return {
-        "name": "New bot",
-        "repositories": [],
+        "user_id": f"{user_id}",
+        "name": f"{name}",
+        "repos": repos,
         "settings": {
             "staleissue": {
                 "enabled": False,
@@ -98,6 +99,35 @@ def get_default_bot():
                 "stale_comment": "This pull request was marked as stale due to inactivity",
                 "close_comment": "This stale pull request was closed due to inactivity"
             }
+        }
+    }
+
+def get_available_repos_for_bot():
+    return {
+        "available": {
+            "repos": [
+                {
+                    "id": 1,
+                    "name": "NewTest",
+                    "org": "newtest"
+                },
+                {
+                    "id": 2,
+                    "name": "Django",
+                    "org": "octocat"
+                },
+                {
+                    "id": 3,
+                    "name": "React Native",
+                    "org": "octocat"
+                },
+                {
+                    "id": 4,
+                    "name": "BotPlatform",
+                    "org": "helvy"
+                }
+            ],
+            "futureRepos": True
         }
     }
     
