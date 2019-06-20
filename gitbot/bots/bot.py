@@ -1,6 +1,5 @@
-from distutils import util
 from sanic import Blueprint, response
-from sanic.exceptions import Unauthorized, NotFound, ServerError, InvalidUsage
+from sanic.exceptions import Unauthorized, NotFound, ServerError
 
 from firebase_admin import auth
 from firebase_admin.auth import AuthError
@@ -10,40 +9,7 @@ import helpers
 # This variable is initialized magically outside
 db = None
 
-bots = Blueprint('bots', url_prefix='/bots')
-
-@bots.route("/list", methods=['GET'])
-async def get_user_bots(request):
-  user_id = request["user_id"]
-
-  isFull = False
-  if "full" in request.args:
-    # Takes only the last value, which overrides previous
-    isFull = util.strtobool(request.args["full"][-1])
-
-  # new_bot = helpers.get_bot_settings(user_id=user_id, name=js["name"], repos=js["repositories"])
-  cursor = await db.bots.find(
-    filter={"user_id": user_id},
-    projection=None if isFull else {"_id", "name"}
-  )
-
-  limit = 30
-  if "limit" in request.args:
-    number = int(request.args["limit"][-1])
-    if number <= 0:
-      raise InvalidUsage(f"Non-positive [limit={number}] query parameter is not allowed")
-    limit = number
-
-  result = await cursor.list(limit)
-  return response.json(result, status=200)
-
-  # if not res.acknowledged or res.inserted_id != user_id:
-  #   raise ServerError("Failed to save bot settings into database")
-  
-  # return response.json({}, status=200)
-
-  # bot = helpers.get_available_repos_for_bot()
-  # return response.json(bot, status=200)
+bot = Blueprint('bot', url_prefix='/bot')
 
 # @bot.route("/", methods=['POST'])
 # async def create_bot(request):
@@ -87,12 +53,12 @@ async def get_user_bots(request):
   # return response.json(bot["settings"], status=200)
 
 # Returns bot settings to create bot
-@bots.route("/new", methods=['GET'])
+@bot.route("/new", methods=['GET'])
 async def get_info_for_new_bot(request):
   bot = helpers.get_available_repos_for_bot()
   return response.json(bot, status=200)
 
-@bots.route("/new", methods=['POST'])
+@bot.route("/new", methods=['POST'])
 async def create_bot(request):
 
   # FIXME: Check that all passed repositories and 
@@ -136,7 +102,7 @@ async def create_bot(request):
   bot = helpers.get_available_repos_for_bot()
   return response.json(bot, status=200)
 
-@bots.route("/settings", methods=['GET'])
+@bot.route("/settings", methods=['GET'])
 async def settings(request):
   bot = await db.bots.find_one(filter={"_id": request.user_id}, projection=["settings"])
 

@@ -17,6 +17,7 @@ class Version:
     @database.setter
     def database(self, value):
         self._database = value
+        gitbot.bots.bot.db = self._database
         gitbot.bots.bots.db = self._database
 
     @property
@@ -42,7 +43,7 @@ v1 = Version()
 # from gitbot.bots import bot
 
 # endpoints with required authentication
-auth_group = Blueprint.group(gitbot.bots.bot)
+auth_group = Blueprint.group(gitbot.bots.bot, gitbot.bots.bots)
 
 # Add required JWT authentication to this group
 auth_group.middleware("request")(verify_token)
