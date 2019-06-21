@@ -1,0 +1,29 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+sanic = "*"
+sanic-admin = "*"
+aoiklivereload = "*"
+aiohttp = "*"
+cchardet = "*"
+aiodns = "*"
+rope = "*"
+pydantic = {extras = ["ujson"]}
+"autopep8" = "*"
+motor = "*"
+dnspython = "*"
+sanic-jwt = "*"
+pyjwt = "*"
+cryptography = "*"
+emoji = "*"
+toolz = "*"
+firebase-admin = "*"
+sanic-cors = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.7"
