@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 from sanic import Blueprint
-from gitbot.auth import verify_token
+# from gitbot.auth.auth import verify_token
 
 # Routes for /v1/ api version with required authentication
-import gitbot.bots
+import gitbot.bots.bot
+import gitbot.bots.bots
+import gitbot.auth.auth
 
 class Version:
     def __init__(self):
@@ -19,6 +21,7 @@ class Version:
         self._database = value
         gitbot.bots.bot.db = self._database
         gitbot.bots.bots.db = self._database
+        gitbot.auth.auth.db = self._database
 
     @property
     def blueprint(self):
@@ -29,26 +32,16 @@ class Version:
         self._blueprint = value
 
 
-# def v1(database):
-#     gitbot.bots.bots.db = database
-
-
 v1 = Version()
 
-# Database to be used for this version of API
-# gitbot.bots.db = v1.database
-# gitbot.bots.bots.db = v1.database
-
-
-# from gitbot.bots import bot
-
 # endpoints with required authentication
-auth_group = Blueprint.group(gitbot.bots.bot, gitbot.bots.bots)
+with_auth = Blueprint.group(
+    gitbot.auth.auth.blueprint,
+    gitbot.bots.bot.bot,
+    gitbot.bots.bots.bots
+)
 
 # Add required JWT authentication to this group
-auth_group.middleware("request")(verify_token)
+with_auth.middleware("request")(gitbot.auth.auth.verify_token)
 
-# version1 = Blueprint.group(auth_group, url_prefix="/v1")
-# version1 = Blueprint.group(auth_group, url_prefix="/v1")
-
-v1.blueprint = Blueprint.group(auth_group, url_prefix="/v1") 
+v1.blueprint = Blueprint.group(with_auth, url_prefix="/v1") 
