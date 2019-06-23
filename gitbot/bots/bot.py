@@ -71,7 +71,7 @@ async def create_bot(request):
 
   new_bot = helpers.get_bot_settings(user_id=user_id, name=js["name"], repos=js["repositories"])
   res = await db.bots.insert_one(new_bot)
-  if not res.acknowledged or res.inserted_id != user_id:
+  if not res.acknowledged:
     raise ServerError("Failed to save bot settings into database")
   
   return response.json({}, status=200)
