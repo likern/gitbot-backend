@@ -16,15 +16,15 @@ bots = Blueprint('bots', url_prefix='/bots')
 async def get_user_bots(request):
   user_id = request["user_id"]
 
-  isFull = False
-  if "full" in request.args:
+  detailed = False
+  if "detailed" in request.args:
     # Takes only the last value, which overrides previous
-    isFull = util.strtobool(request.args["full"][-1])
+    detailed = util.strtobool(request.args["detailed"][-1])
 
   # new_bot = helpers.get_bot_settings(user_id=user_id, name=js["name"], repos=js["repositories"])
   cursor = await db.bots.find(
     filter={"user_id": user_id},
-    projection=None if isFull else {"_id", "name"}
+    projection=None if detailed else {"_id", "name"}
   )
 
   limit = 30
