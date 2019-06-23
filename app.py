@@ -287,7 +287,7 @@ async def finish(app, loop):
 #     # return response.json({}, status=status)
 
 
-@app.route("/github/auth", methods=['GET'])
+@app.route("/webhook/github/auth", methods=['GET'])
 async def github_auth_webhook(request):
     print("[GITHUB] [AUTH] QUERY PARAMS:")
     print(request.args)
@@ -782,43 +782,6 @@ async def show_bot_description(update, set_context):
 async def github_webhook(request):
     return await webhooks.github.webhook(request)
     # return response.json({}, status=200)
-
-
-@app.route("/signup", methods=['POST'])
-async def signup(request):
-    token = request.token
-    decoded_token = auth.verify_id_token(token)
-    print(decoded_token)
-
-    uid = decoded_token['uid']
-    user = await db.gitbot.users.find_one(
-        filter={
-            "_id": uid
-        }
-    )
-
-    res = await db.gitbot.users.insert_one(user)
-    if not res.acknowledged or res.inserted_id != uid:
-        raise ServerError("Failed to save user settings into database")
-    return response.json({}, status=200)
-
-    # if user is None:
-    #     user = {"_id": uid}
-    #     bot = helpers.get_default_bot(user_id=uid)
-
-    #     async with await app.clients.mongodb.start_session() as s:
-    #         async with s.start_transaction():
-    #             res1 = await db.helvy.bots.insert_one(bot, session=s)
-    #             res2 = await db.helvy.users.insert_one(user, session=s)
-
-    #             res1_fail = not res1.acknowledged or res1.inserted_id != uid
-    #             res2_fail = not res2.acknowledged or res2.inserted_id != uid
-    #             if res1_fail or res2_fail:
-    #                 s.abort_transaction()
-    #     return response.json({}, status=200)
-    # return response.json({}, status=403)
-
-
 
 
 # This webhook processes incoming Telegram events
