@@ -1,5 +1,5 @@
-from sanic import Sanic
-from sanic import response
+
+
 import asyncio
 import subprocess
 from datetime import timedelta
@@ -9,12 +9,14 @@ from decorators import mongodb
 from motor import motor_asyncio
 from emoji import emojize
 from enum import Enum, EnumMeta
-# import contextvars
 from contextvars import Context, copy_context
-from sanic.handlers import ErrorHandler
-from sanic_cors import CORS
+
 from bots import StaleBot
 
+# Sanic-related imports
+from sanic import Sanic, response
+from sanic.handlers import ErrorHandler
+from sanic_cors import CORS
 
 from models import github, mongo, telegram
 from types import SimpleNamespace
@@ -26,22 +28,32 @@ from intl import Intl
 
 from firebase_admin import auth
 
-
-
-
-from bson.objectid import ObjectId
+from bson import ObjectId
 
 import pytebot
 import githook
 import webhooks
 import gitbot
+import functools
 
-# class TelegramErrorHandler(ErrorHandler):
-# 	def default(self, request, exception):
-# 		''' handles errors that have no error handlers assigned '''
-# 		# You custom error handling logic...
-# 		return super().default(request, exception)
 
+# TODO: Move out to Mongo-related folder
+# Monkey patching because sanic developers refused 
+# to support custom JSON encoders / decoders
+# https://github.com/huge-success/sanic/issues/1609
+
+class MongoJsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        return json.JSONEncoder.default(self, o)
+
+
+mongo_json_encoder = MongoJsonEncoder()
+response.json = functools.partial(
+    response.json,
+    dumps=mongo_json_encoder.encode
+)
 
 app = Sanic(__name__, load_env='GITBOT_')
 CORS(app, automatic_options=True)
@@ -815,13 +827,6 @@ async def show_telegram_bots():
         parse_mode=telegram.ParseMode.markdown,
         reply_markup=keyboard_markup
     )
-
-# async def redirect_to_github_with_custom_headers(self, *, url, state):
-
-#     async with aiohttp.ClientSession() as session:
-#         async with session.get(url, headers=headers) as resp:
-#             print(resp.status)
-#             print(await resp.text())
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
