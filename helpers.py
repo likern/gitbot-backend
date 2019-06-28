@@ -75,11 +75,11 @@ def get_firebase_client(path):
 #         }
 #     }
 
-def get_bot_settings(user_id, name, repos):
+def get_bot_settings(user_id, name, repositories):
     return {
         "user_id": f"{user_id}",
         "name": f"{name}",
-        "repos": repos,
+        "repositories": repositories,
         "settings": {
             "staleissue": {
                 "enabled": False,
