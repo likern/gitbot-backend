@@ -22,9 +22,9 @@ async def get_user_bots(request):
     detailed = util.strtobool(request.args["detailed"][-1])
 
   # new_bot = helpers.get_bot_settings(user_id=user_id, name=js["name"], repos=js["repositories"])
-  cursor = await db.bots.find(
+  cursor = db.bots.find(
     filter={"user_id": user_id},
-    projection=None if detailed else {"_id", "name"}
+    projection=None if detailed else ["_id", "name"]
   )
 
   limit = 30
@@ -34,8 +34,14 @@ async def get_user_bots(request):
       raise InvalidUsage(f"Non-positive [limit={number}] query parameter is not allowed")
     limit = number
 
-  result = await cursor.list(limit)
-  return response.json(result, status=200)
+  bots = await cursor.to_list(limit)
+  obj = { "bots": bots }
+  
+  # from app import TestJSONEncoder
+  # test_encoder = TestJSONEncoder()
+  # result = test_encoder.encode(obj)
+  test = response.json(obj, status=200)
+  return test
 
   # if not res.acknowledged or res.inserted_id != user_id:
   #   raise ServerError("Failed to save bot settings into database")

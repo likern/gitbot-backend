@@ -1,5 +1,3 @@
-
-
 import asyncio
 import subprocess
 from datetime import timedelta
@@ -790,7 +788,7 @@ async def show_bot_description(update, set_context):
 
 
 # This webhook processes incoming GitHub events
-@app.route("/github", methods=['POST'])
+@app.route("/webhook/github", methods=['POST'])
 async def github_webhook(request):
     return await webhooks.github.webhook(request)
     # return response.json({}, status=200)

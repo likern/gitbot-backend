@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 from sanic import Blueprint
+from sanic.response import text
 # from gitbot.auth.auth import verify_token
 
 # Routes for /v1/ api version with required authentication
 import gitbot.bots.bot
 import gitbot.bots.bots
 import gitbot.auth.auth
+from gitbot.middlewares import mongoObjectToJson
 
 class Version:
     def __init__(self):
@@ -45,3 +47,8 @@ with_auth = Blueprint.group(
 with_auth.middleware("request")(gitbot.auth.auth.verify_token)
 
 v1.blueprint = Blueprint.group(with_auth, url_prefix="/v1") 
+
+# @v1.blueprint.middleware('response')
+# async def halt_response(request, response):
+# 	return text('I halted the response')
+# v1.blueprint.middleware("response")(mongoObjectToJson)

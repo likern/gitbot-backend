@@ -26,7 +26,8 @@ class GitHub:
         context: Context = NoneContext,
         http_client: aiohttp.ClientSession = None,
         mongodb_client: AsyncIOMotorClient = None,
-        base_url: str = BASE_URL):
+        base_url: str = BASE_URL,
+        db = None):
 
         self._allowed_handler_args = ["middleware", "set_context"]
         self._token = token
