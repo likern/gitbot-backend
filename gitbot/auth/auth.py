@@ -40,7 +40,7 @@ async def signup(request):
     if user is not None:
       raise UnprocessableEntity("User is already registered")
 
-    res = await db.users.insert_one({"_id": user_id })
+    res = await db.users.insert_one({"_id": user_id, "installed": False })
     if not res.acknowledged or res.inserted_id != user_id:
         raise ServerError("Failed to singup a new user")
     return response.json({}, status=200)
